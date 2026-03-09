@@ -1,0 +1,200 @@
+"""src/warehouse/load_duckdb.py
+
+Warehouse layer: load curated gold Parquet tables and ML forecasts
+into DuckDB for fast analytical queries.
+
+DuckDB can read Parquet natively via ``read_parquet()`` so data is
+never duplicated on disk — the warehouse is a logical view layer
+backed by the Parquet lake files.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from src.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+logger = get_logger(__name__)
+
+try:
+    import duckdb  # type: ignore
+
+    DUCKDB_AVAILABLE = True
+except ImportError:
+    DUCKDB_AVAILABLE = False
+    logger.warning("duckdb not installed - warehouse layer unavailable")
+
+
+def _assert_duckdb() -> None:
+    if not DUCKDB_AVAILABLE:
+        msg = "duckdb is not installed.  Run: pip install duckdb"
+        raise ImportError(msg)
+
+
+def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
+    """Open (or create) a DuckDB database file.
+
+    Parameters
+    ----------
+    db_path:
+        File-system path to the ``.duckdb`` file.
+
+    Returns
+    -------
+    duckdb.DuckDBPyConnection
+
+    """
+    _assert_duckdb()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = duckdb.connect(str(db_path))
+    logger.info("DuckDB connected: %s", db_path)
+    return conn
+
+
+def load_parquet_as_table(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    parquet_path: Path,
+    partition_discovery: bool = True,
+) -> int:
+    """(Re)create a DuckDB table backed by a Parquet lake.
+
+    The table is always **replaced** so the operation is idempotent.
+
+    Parameters
+    ----------
+    conn:
+        Open DuckDB connection.
+    table_name:
+        Destination table name.
+    parquet_path:
+        Directory or file path with Parquet data.
+    partition_discovery:
+        When True, use ``**/*.parquet`` glob to pick up partitioned lakes.
+
+    Returns
+    -------
+    int
+        Row count of the loaded table.
+
+    """
+    if not parquet_path.exists():
+        logger.warning("Parquet path does not exist, skipping: %s", parquet_path)
+        return 0
+
+    glob = f"{parquet_path}/**/*.parquet" if partition_discovery else str(parquet_path)
+
+    sql = f"""
+        CREATE OR REPLACE TABLE {table_name} AS
+        SELECT * FROM read_parquet('{glob}', hive_partitioning=true);
+    """
+    conn.execute(sql)
+    row_count: int = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+    logger.info("Loaded table '%s': %d rows", table_name, row_count)
+    return row_count
+
+
+def create_analytical_views(conn: duckdb.DuckDBPyConnection) -> None:
+    """Create convenience views on top of the raw tables.
+
+    Views
+    -----
+    v_latest_rates:
+        Most recent rate per currency pair.
+    v_forecast_summary:
+        Next-30-day forecast with risk flags.
+    """
+    conn.execute("""
+        CREATE OR REPLACE VIEW v_latest_rates AS
+        SELECT
+            currency_pair,
+            date,
+            rate,
+            ma_7,
+            ma_30,
+            ma_90,
+            volatility_30,
+            rate_z_score
+        FROM gold_exchange_rates
+        WHERE date = (SELECT MAX(date) FROM gold_exchange_rates)
+        ORDER BY currency_pair;
+    """)
+
+    conn.execute("""
+        CREATE OR REPLACE VIEW v_forecast_summary AS
+        SELECT
+            f.currency_pair,
+            f.forecast_date,
+            f.yhat         AS forecast_rate,
+            f.yhat_lower   AS lower_bound,
+            f.yhat_upper   AS upper_bound,
+            f.yhat_upper - f.yhat_lower AS uncertainty_range,
+            f.model_trained_at
+        FROM ml_forecasts f
+        ORDER BY f.currency_pair, f.forecast_date;
+    """)
+
+    logger.info("Analytical views created: v_latest_rates, v_forecast_summary")
+
+
+def run_warehouse(
+    db_path: Path,
+    gold_dir: Path,
+    forecasts_dir: Path,
+    table_names: dict[str, str] | None = None,
+) -> duckdb.DuckDBPyConnection:
+    """Full warehouse pipeline: connect → load tables → create views.
+
+    Parameters
+    ----------
+    db_path:
+        DuckDB file path.
+    gold_dir:
+        Gold Parquet lake directory.
+    forecasts_dir:
+        Forecasts Parquet directory.
+    table_names:
+        Optional override for table name mapping.
+        Defaults to ``{"exchange_rates": "gold_exchange_rates",
+                       "forecasts": "ml_forecasts"}``.
+
+    Returns
+    -------
+    duckdb.DuckDBPyConnection
+        Open connection for further querying.
+
+    """
+    _assert_duckdb()
+    logger.info("Starting warehouse load pipeline")
+
+    table_names = table_names or {
+        "exchange_rates": "gold_exchange_rates",
+        "forecasts": "ml_forecasts",
+    }
+
+    conn = get_connection(db_path)
+
+    load_parquet_as_table(
+        conn,
+        table_names["exchange_rates"],
+        gold_dir,
+        partition_discovery=True,
+    )
+
+    forecast_file = forecasts_dir / "forecasts.parquet"
+    if forecast_file.exists():
+        load_parquet_as_table(
+            conn,
+            table_names["forecasts"],
+            forecast_file,
+            partition_discovery=False,
+        )
+    else:
+        logger.warning("Forecasts file not found: %s", forecast_file)
+
+    create_analytical_views(conn)
+    logger.info("Warehouse pipeline complete")
+    return conn
