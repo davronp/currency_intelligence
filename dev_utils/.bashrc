@@ -18,7 +18,9 @@ alias d="git checkout develop"
 alias m="git checkout master"
 alias gmd="git merge develop"
 alias ls="ls -alh --color=auto"
-
+alias venv="source venv/bin/activate"
+alias cdpc="cd Projects/currency_intelligence/"
+alias cdpcv="cdpc && venv"
 parse_git_branch() {
      git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/(\1)/'
 }

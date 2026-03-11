@@ -61,7 +61,7 @@ fi
 cd "$PROJECT_ROOT" || exit 1
 
 if ask_permission "Create Python virtual environment"; then
-    python3 -m pip install --upgrade pip virtualenv
+    sudo apt install -y python3 python3-venv python3-pip
     python3 -m venv venv
 
     source venv/bin/activate
