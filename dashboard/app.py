@@ -1,4 +1,4 @@
-"""dashboard/app.py
+"""dashboard/app.py.
 
 Streamlit dashboard for the Currency Intelligence Platform.
 
@@ -112,13 +112,7 @@ df_view = df_gold[df_gold["currency_pair"].isin(selected_pairs)] if selected_pai
 
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    [
-        "📈 Historical Rates",
-        "📊 Daily Returns",
-        "🔬 Analytics",
-        "🔮 Forecasts",
-        "🐥 DuckDB Explorer",
-    ]
+    ["📈 Historical Rates", "📊 Daily Returns", "🔬 Analytics", "🔮 Forecasts", "🐥 DuckDB Explorer"]
 )
 
 
@@ -140,7 +134,7 @@ with tab1:
             template="plotly_dark",
         )
         fig.update_layout(legend_title_text="Pair", height=450)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         col1, col2, col3 = st.columns(3)
         for i, pair in enumerate(selected_pairs[:3]):
@@ -179,7 +173,7 @@ with tab2:
         )
         fig.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
         fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Summary stats
         st.markdown("**Return statistics**")
@@ -187,7 +181,7 @@ with tab2:
             df_ret.groupby("currency_pair")["daily_return_pct"].agg(["mean", "std", "min", "max"]).round(4)
         )
         stats.columns = ["Mean %", "Std Dev %", "Min %", "Max %"]
-        st.dataframe(stats, use_container_width=True)
+        st.dataframe(stats, width="stretch")
 
 
 with tab3:
@@ -204,19 +198,8 @@ with tab3:
                 continue
 
             fig = go.Figure()
-            fig.add_trace(
-                go.Scatter(
-                    x=pair_df["date"],
-                    y=pair_df["rate"],
-                    name="Rate",
-                    line={"width": 1},
-                )
-            )
-            for ma_col, colour in [
-                ("ma_7", "#f59e0b"),
-                ("ma_30", "#10b981"),
-                ("ma_90", "#6366f1"),
-            ]:
+            fig.add_trace(go.Scatter(x=pair_df["date"], y=pair_df["rate"], name="Rate", line={"width": 1}))
+            for ma_col, colour in [("ma_7", "#f59e0b"), ("ma_30", "#10b981"), ("ma_90", "#6366f1")]:
                 if ma_col in pair_df.columns:
                     fig.add_trace(
                         go.Scatter(
@@ -232,7 +215,7 @@ with tab3:
                 height=350,
                 legend={"orientation": "h"},
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         # Volatility heatmap
         st.markdown("**30-day Volatility (std dev of daily returns)**")
@@ -240,7 +223,9 @@ with tab3:
             import plotly.express as px
 
             vol_df = df_view[df_view["volatility_30"].notna()].copy()
-            vol_pivot = vol_df.pivot_table(index="date", columns="currency_pair", values="volatility_30")
+            vol_pivot = vol_df.pivot_table(
+                index="date", columns="currency_pair", values="volatility_30", observed=True
+            )
             fig_heat = px.imshow(
                 vol_pivot.T,
                 labels={"color": "Volatility"},
@@ -249,7 +234,7 @@ with tab3:
                 aspect="auto",
             )
             fig_heat.update_layout(height=250)
-            st.plotly_chart(fig_heat, use_container_width=True)
+            st.plotly_chart(fig_heat, width="stretch")
 
 
 with tab4:
@@ -308,7 +293,7 @@ with tab4:
                 xaxis_title="Date",
                 yaxis_title="Rate",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Forecast table
             with st.expander(f"View {pair} forecast data"):
@@ -324,7 +309,7 @@ with tab4:
                     )
                     .set_index("Date")
                     .round(5),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 
@@ -364,7 +349,7 @@ LIMIT 20;""",
             try:
                 result = conn.execute(user_sql).df()
                 st.success(f"{len(result)} row(s) returned")
-                st.dataframe(result, use_container_width=True)
+                st.dataframe(result, width="stretch")
             except Exception as e:
                 st.error(f"Query error: {e}")
 
@@ -373,6 +358,6 @@ LIMIT 20;""",
             tables = conn.execute(
                 "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema='main' ORDER BY 1"
             ).df()
-            st.dataframe(tables, use_container_width=True)
+            st.dataframe(tables, width="stretch")
         except Exception:
             pass

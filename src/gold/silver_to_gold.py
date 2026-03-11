@@ -1,4 +1,4 @@
-"""src/gold/silver_to_gold.py
+"""src/gold/silver_to_gold.py.
 
 Gold layer: generate analytical features on top of the clean
 silver data and write the curated dataset to Parquet.
@@ -164,8 +164,12 @@ def transform_to_gold(
 
 
 def write_gold(df: DataFrame, gold_dir: Path) -> None:
-    """Write the gold dataset partitioned by date."""
-    write_parquet(df, str(gold_dir), partition_by=["date"], mode="overwrite")
+    """Write the gold dataset as a single Parquet file.
+
+    Coalescing to 1 keeps the lake lean — the full gold dataset for
+    years of daily data for a handful of pairs is still well under 50 MB.
+    """
+    write_parquet(df.coalesce(1), str(gold_dir), partition_by=None, mode="overwrite")
     logger.info("Gold layer written → %s", gold_dir)
 
 

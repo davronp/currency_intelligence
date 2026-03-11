@@ -1,9 +1,9 @@
-
+#
 #  Currency Intelligence Platform - Settings
-
+#
 
 project:
-  name: currency_intelligence
+  name: currency-intelligence
   version: "1.0.0"
   timezone: UTC
 
@@ -13,12 +13,13 @@ currencies:
   targets:
     - EUR
     - SEK
-    - UZS
+    - GBP
 
 
 api:
-  provider: exchangerate-api          # free tier: https://open.er-api.com
-  base_url: "https://open.er-api.com/v6/latest"
+  # Primary: Frankfurter (ECB data, free, no key, historical back to 1999)
+  provider: frankfurter
+  base_url: "https://api.frankfurter.app"
   timeout_seconds: 30
   retry_attempts: 3
   retry_backoff_seconds: 5

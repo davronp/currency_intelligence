@@ -1,4 +1,4 @@
-"""tests/test_silver.py
+"""tests/test_silver.py.
 
 Unit tests for src/silver/bronze_to_silver.py.
 """
@@ -19,7 +19,7 @@ from src.silver.bronze_to_silver import (
 
 
 def _bronze_rows(spark, overrides: list[dict] | None = None):
-    """Return a minimal bronze-shaped DataFrame."""
+    """Return a minimal bronze-shaped DataFrame with EUR/SEK/GBP pairs."""
     defaults = [
         {
             "ingestion_date": "2024-01-13",
@@ -72,8 +72,7 @@ class TestFilterValidRates:
                 ),
             ]
         )
-        result = filter_valid_rates(df)
-        assert result.count() == 1
+        assert filter_valid_rates(df).count() == 1
 
     def test_removes_zero_rate(self, spark):
         df = spark.createDataFrame(
@@ -88,8 +87,7 @@ class TestFilterValidRates:
                 ),
             ]
         )
-        result = filter_valid_rates(df, min_rate=1e-6)
-        assert result.count() == 0
+        assert filter_valid_rates(df, min_rate=1e-6).count() == 0
 
     def test_removes_negative_rate(self, spark):
         df = spark.createDataFrame(
@@ -104,61 +102,77 @@ class TestFilterValidRates:
                 ),
             ]
         )
-        result = filter_valid_rates(df)
-        assert result.count() == 0
+        assert filter_valid_rates(df).count() == 0
 
-    def test_keeps_valid_rates(self, spark):
+    def test_keeps_all_valid_pairs(self, spark):
         df = spark.createDataFrame(
             [
                 Row(
                     ingestion_date="2024-01-15",
                     base_currency="USD",
-                    target_currency="EUR",
-                    rate=0.92,
+                    target_currency=t,
+                    rate=r,
                     source="api",
                     ingested_at="2024-01-15",
-                ),
-                Row(
-                    ingestion_date="2024-01-15",
-                    base_currency="USD",
-                    target_currency="UZS",
-                    rate=12650.0,
-                    source="api",
-                    ingested_at="2024-01-15",
-                ),
+                )
+                for t, r in [("EUR", 0.92), ("SEK", 10.45), ("GBP", 0.79)]
             ]
         )
-        result = filter_valid_rates(df)
-        assert result.count() == 2
+        assert filter_valid_rates(df).count() == 3
 
 
 class TestAddCurrencyPair:
     def test_column_added(self, spark):
-        df = _bronze_rows(spark)
-        result = add_currency_pair(df)
-        assert "currency_pair" in result.columns
+        assert "currency_pair" in add_currency_pair(_bronze_rows(spark)).columns
 
-    def test_pair_format(self, spark):
-        df = _bronze_rows(spark)
-        result = add_currency_pair(df)
-        pairs = {r.currency_pair for r in result.select("currency_pair").collect()}
+    def test_pair_format_usd_eur(self, spark):
+        df = add_currency_pair(_bronze_rows(spark))
+        pairs = {r.currency_pair for r in df.select("currency_pair").collect()}
         assert "USD_EUR" in pairs
 
-    def test_pair_count_unchanged(self, spark):
+    def test_pair_format_usd_sek(self, spark):
+        df = spark.createDataFrame(
+            [
+                Row(
+                    ingestion_date="2024-01-15",
+                    base_currency="USD",
+                    target_currency="SEK",
+                    rate=10.45,
+                    source="api",
+                    ingested_at="2024-01-15",
+                )
+            ]
+        )
+        result = add_currency_pair(df)
+        assert result.collect()[0]["currency_pair"] == "USD_SEK"
+
+    def test_pair_format_usd_gbp(self, spark):
+        df = spark.createDataFrame(
+            [
+                Row(
+                    ingestion_date="2024-01-15",
+                    base_currency="USD",
+                    target_currency="GBP",
+                    rate=0.79,
+                    source="api",
+                    ingested_at="2024-01-15",
+                )
+            ]
+        )
+        result = add_currency_pair(df)
+        assert result.collect()[0]["currency_pair"] == "USD_GBP"
+
+    def test_row_count_unchanged(self, spark):
         df = _bronze_rows(spark)
         assert add_currency_pair(df).count() == df.count()
 
 
 class TestAddDateColumn:
     def test_date_column_exists(self, spark):
-        df = _bronze_rows(spark)
-        result = add_date_column(df)
-        assert "date" in result.columns
+        assert "date" in add_date_column(_bronze_rows(spark)).columns
 
     def test_ingestion_date_removed(self, spark):
-        df = _bronze_rows(spark)
-        result = add_date_column(df)
-        assert "ingestion_date" not in result.columns
+        assert "ingestion_date" not in add_date_column(_bronze_rows(spark)).columns
 
 
 class TestComputeDailyReturns:
@@ -169,30 +183,22 @@ class TestComputeDailyReturns:
         return df.withColumn("date", F.to_date(F.col("date")))
 
     def test_prev_rate_column_added(self, spark):
-        df = self._prepare(spark)
-        result = compute_daily_returns(df)
-        assert "prev_rate" in result.columns
+        assert "prev_rate" in compute_daily_returns(self._prepare(spark)).columns
 
     def test_daily_return_column_added(self, spark):
-        df = self._prepare(spark)
-        result = compute_daily_returns(df)
-        assert "daily_return" in result.columns
+        assert "daily_return" in compute_daily_returns(self._prepare(spark)).columns
 
     def test_first_row_return_is_null(self, spark):
-        df = self._prepare(spark)
-        result = compute_daily_returns(df).orderBy("date")
-        first = result.collect()[0]
-        assert first["daily_return"] is None
+        result = compute_daily_returns(self._prepare(spark)).orderBy("date")
+        assert result.collect()[0]["daily_return"] is None
 
     def test_return_value_correct(self, spark):
-        """Rate goes 0.90 → 0.92 → return = (0.92/0.90) - 1 ≈ 0.0222."""
-        df = self._prepare(spark)
-        rows = compute_daily_returns(df).orderBy("date").collect()
-        expected = (0.92 / 0.90) - 1
-        assert rows[1]["daily_return"] == pytest.approx(expected, rel=1e-4)
+        """0.90 -> 0.92: return = (0.92/0.90) - 1."""
+        rows = compute_daily_returns(self._prepare(spark)).orderBy("date").collect()
+        assert rows[1]["daily_return"] == pytest.approx((0.92 / 0.90) - 1, rel=1e-4)
 
-    def test_multiple_pairs_independent(self, spark):
-        """Daily returns should be computed per currency pair independently."""
+    def test_three_pairs_independent(self, spark):
+        """EUR, SEK and GBP daily returns should be computed independently."""
         rows = [
             Row(
                 date="2024-01-13",
@@ -230,17 +236,34 @@ class TestComputeDailyReturns:
                 source="api",
                 ingested_at="2024-01-14",
             ),
+            Row(
+                date="2024-01-13",
+                currency_pair="USD_GBP",
+                base_currency="USD",
+                target_currency="GBP",
+                rate=0.78,
+                source="api",
+                ingested_at="2024-01-13",
+            ),
+            Row(
+                date="2024-01-14",
+                currency_pair="USD_GBP",
+                base_currency="USD",
+                target_currency="GBP",
+                rate=0.79,
+                source="api",
+                ingested_at="2024-01-14",
+            ),
         ]
         df = spark.createDataFrame(rows).withColumn("date", F.to_date(F.col("date")))
-        result = compute_daily_returns(df).orderBy("currency_pair", "date")
-        collected = {(r.currency_pair, str(r.date)): r.daily_return for r in result.collect()}
-
-        # First day per pair should have null return
-        assert collected[("USD_EUR", "2024-01-13")] is None
-        assert collected[("USD_SEK", "2024-01-13")] is None
-
-        assert collected[("USD_EUR", "2024-01-14")] == pytest.approx((0.92 / 0.90) - 1, rel=1e-4)
-        assert collected[("USD_SEK", "2024-01-14")] == pytest.approx((10.5 / 10.0) - 1, rel=1e-4)
+        result = {(r.currency_pair, str(r.date)): r.daily_return for r in compute_daily_returns(df).collect()}
+        # First day per pair always null
+        for pair in ["USD_EUR", "USD_SEK", "USD_GBP"]:
+            assert result[(pair, "2024-01-13")] is None
+        # Second day returns are independent
+        assert result[("USD_EUR", "2024-01-14")] == pytest.approx((0.92 / 0.90) - 1, rel=1e-4)
+        assert result[("USD_SEK", "2024-01-14")] == pytest.approx((10.5 / 10.0) - 1, rel=1e-4)
+        assert result[("USD_GBP", "2024-01-14")] == pytest.approx((0.79 / 0.78) - 1, rel=1e-4)
 
 
 class TestTransformToSilver:
@@ -251,11 +274,9 @@ class TestTransformToSilver:
         df = df.withColumn("ingestion_date", F.to_date(F.col("ingestion_date")))
         df = df.withColumn("ingested_at", F.to_timestamp(F.col("ingested_at")))
         result = transform_to_silver(df)
-        expected = {f.name for f in SILVER_SCHEMA.fields}
-        actual = set(result.columns)
-        assert actual == expected
+        assert set(result.columns) == {f.name for f in SILVER_SCHEMA.fields}
 
-    def test_output_has_no_invalid_rates(self, spark):
+    def test_invalid_rates_excluded(self, spark):
         rows = [
             Row(
                 ingestion_date="2024-01-15",
@@ -273,10 +294,27 @@ class TestTransformToSilver:
                 source="api",
                 ingested_at="2024-01-15T10:00:00",
             ),
+            Row(
+                ingestion_date="2024-01-15",
+                base_currency="USD",
+                target_currency="GBP",
+                rate=0.79,
+                source="api",
+                ingested_at="2024-01-15T10:00:00",
+            ),
         ]
         df = spark.createDataFrame(rows)
         df = df.withColumn("ingestion_date", F.to_date(F.col("ingestion_date")))
         df = df.withColumn("ingested_at", F.to_timestamp(F.col("ingested_at")))
         result = transform_to_silver(df)
-        rates = [r.rate for r in result.collect()]
-        assert all(r > 0 for r in rates)
+        assert all(r.rate > 0 for r in result.collect())
+        assert result.count() == 2
+
+    def test_currency_pair_column_present(self, spark):
+        df = _bronze_rows(spark)
+        df = df.withColumn("ingestion_date", F.to_date(F.col("ingestion_date")))
+        df = df.withColumn("ingested_at", F.to_timestamp(F.col("ingested_at")))
+        result = transform_to_silver(df)
+        assert "currency_pair" in result.columns
+        pairs = {r.currency_pair for r in result.collect()}
+        assert "USD_EUR" in pairs

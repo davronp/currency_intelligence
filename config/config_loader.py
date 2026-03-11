@@ -1,4 +1,4 @@
-"""config/config_loader.py
+"""config/config_loader.py.
 
 Typed configuration loader.  Reads settings.yaml and exposes
 strongly-typed dataclasses so every module can import config

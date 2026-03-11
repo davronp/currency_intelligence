@@ -1,11 +1,11 @@
-"""run_pipeline.py
+"""run_pipeline.py.
 
 Main pipeline orchestrator for the Currency Intelligence Platform.
 
 Execution order
 ---------------
-1. Ingestion   - fetch live exchange rates and save raw JSON
-2. Bronze      - convert raw JSON → structured Parquet
+1. Ingestion   - fetch live/historical exchange rates and save raw JSON
+2. Bronze      - convert raw JSON -> structured Parquet
 3. Silver      - clean, normalise, compute daily returns
 4. Gold        - add rolling averages, volatility, z-scores
 5. ML          - train Prophet forecasts per currency pair
@@ -13,20 +13,32 @@ Execution order
 
 Usage
 -----
-    python run_pipeline.py                   # run all stages for today
-    python run_pipeline.py --date 2024-01-15 # run for a specific date
-    python run_pipeline.py --skip-ml         # skip Prophet training
-    python run_pipeline.py --stages bronze silver gold  # selective run
+    # Run all stages for today only
+    python run_pipeline.py
+
+    # Backfill the last 90 days (fetches history + rebuilds all layers)
+    python run_pipeline.py --backfill-days 90
+
+    # Run for an explicit date range
+    python run_pipeline.py --start-date 2025-01-01 --end-date 2025-03-11
+
+    # Run for a single specific date
+    python run_pipeline.py --date 2025-06-01
+
+    # Skip ML forecasting
+    python run_pipeline.py --backfill-days 90 --skip-ml
+
+    # Run only specific stages (e.g. re-build gold after a config change)
+    python run_pipeline.py --stages silver gold warehouse
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
-# Make src importable when run from project root
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -37,24 +49,20 @@ from src.utils.logger import get_logger, setup_logging
 logger = get_logger(__name__)
 
 
-def stage_ingestion(cfg, run_date: date) -> None:
+def stage_ingestion(cfg, run_date: date, force: bool = False) -> None:
     from src.ingestion.fetch_rates import run_ingestion
-
-    for _target in cfg.currencies.targets:
-        logger.info("Ingesting rates for base=USD, target group")
-        break  # The free API returns all rates in one call
 
     run_ingestion(
         base_currency=cfg.currencies.base,
         target_currencies=cfg.currencies.targets,
         raw_dir=cfg.paths.raw,
         base_url=cfg.api.base_url,
+        run_date=run_date,
         timeout=cfg.api.timeout_seconds,
         retry_attempts=cfg.api.retry_attempts,
         retry_backoff=cfg.api.retry_backoff_seconds,
-        run_date=run_date,
+        force=force,
     )
-    logger.info("✓ Ingestion complete")
 
 
 def stage_bronze(cfg, spark, run_date: date) -> None:
@@ -66,7 +74,6 @@ def stage_bronze(cfg, spark, run_date: date) -> None:
         bronze_dir=cfg.paths.bronze,
         run_date=run_date,
     )
-    logger.info("✓ Bronze layer complete")
 
 
 def stage_silver(cfg, spark) -> None:
@@ -79,7 +86,6 @@ def stage_silver(cfg, spark) -> None:
         min_rate=cfg.silver.min_valid_rate,
         max_rate=cfg.silver.max_valid_rate,
     )
-    logger.info("✓ Silver layer complete")
 
 
 def stage_gold(cfg, spark) -> None:
@@ -92,7 +98,6 @@ def stage_gold(cfg, spark) -> None:
         rolling_windows=cfg.gold.rolling_windows,
         volatility_window=cfg.gold.volatility_window,
     )
-    logger.info("✓ Gold layer complete")
 
 
 def stage_ml(cfg) -> None:
@@ -114,7 +119,6 @@ def stage_ml(cfg) -> None:
         prophet_kwargs=prophet_kwargs,
         interval_width=cfg.ml.prophet.interval_width,
     )
-    logger.info("✓ ML forecasting complete")
 
 
 def stage_warehouse(cfg) -> None:
@@ -126,31 +130,79 @@ def stage_warehouse(cfg) -> None:
         forecasts_dir=cfg.paths.forecasts,
         table_names=cfg.warehouse.tables,
     )
-    logger.info("✓ Warehouse load complete")
+
+
+def _date_range(start: date, end: date) -> list[date]:
+    """Return every calendar date from *start* to *end* inclusive."""
+    days = (end - start).days + 1
+    return [start + timedelta(days=i) for i in range(days)]
+
+
+def _skip_weekends(dates: list[date]) -> list[date]:
+    """Filter out Saturdays and Sundays.
+
+    Frankfurter returns weekday-only ECB rates; weekend dates return the
+    most recent Friday's rates (same date string), which would create
+    duplicate rows.
+    """
+    return [d for d in dates if d.weekday() < 5]
 
 
 ALL_STAGES = ["ingestion", "bronze", "silver", "gold", "ml", "warehouse"]
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Currency Intelligence Platform - Pipeline Runner")
-    parser.add_argument(
+    parser = argparse.ArgumentParser(
+        description="Currency Intelligence Platform - Pipeline Runner",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    date_group = parser.add_mutually_exclusive_group()
+    date_group.add_argument(
         "--date",
         type=str,
         default=None,
-        help="Run date in YYYY-MM-DD format (default: today UTC)",
+        help="Single run date YYYY-MM-DD (default: today)",
+    )
+    date_group.add_argument(
+        "--backfill-days",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Fetch the last N calendar days of history (e.g. --backfill-days 90)",
+    )
+    date_group.add_argument(
+        "--start-date",
+        type=str,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Start of an explicit date range (pair with --end-date)",
+    )
+
+    parser.add_argument(
+        "--end-date",
+        type=str,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="End of the date range (default: today, used with --start-date)",
     )
     parser.add_argument(
         "--stages",
         nargs="+",
         choices=ALL_STAGES,
         default=None,
-        help="Stages to run (default: all stages)",
+        help="Stages to run (default: all)",
     )
     parser.add_argument(
         "--skip-ml",
         action="store_true",
-        help="Skip the ML forecasting stage",
+        help="Skip ML forecasting stage",
+    )
+    parser.add_argument(
+        "--force-ingest",
+        action="store_true",
+        help="Re-fetch raw files even if they already exist on disk",
     )
     parser.add_argument(
         "--log-level",
@@ -160,32 +212,55 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def resolve_dates(args: argparse.Namespace) -> list[date]:
+    """Return the ordered list of dates to ingest."""
+    today = date.today()
+
+    if args.backfill_days:
+        start = today - timedelta(days=args.backfill_days - 1)
+        dates = _date_range(start, today)
+    elif args.start_date:
+        start = datetime.strptime(args.start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(args.end_date, "%Y-%m-%d").date() if args.end_date else today
+        dates = _date_range(start, end)
+    elif args.date:
+        dates = [datetime.strptime(args.date, "%Y-%m-%d").date()]
+    else:
+        dates = [today]
+
+    # Frankfurter only has weekday data — skip weekends to avoid dupes
+    weekday_dates = _skip_weekends(dates)
+    skipped = len(dates) - len(weekday_dates)
+    if skipped:
+        logger.info("Skipping %d weekend date(s) (Frankfurter weekdays only)", skipped)
+
+    return weekday_dates
+
+
 def main() -> int:
     args = parse_args()
-
     cfg = load_config()
 
-    # Initialise logging to both console and file
     cfg.paths.logs.mkdir(parents=True, exist_ok=True)
-    log_file = cfg.paths.logs / f"pipeline_{datetime.utcnow():%Y%m%d_%H%M%S}.log"
+    log_file = cfg.paths.logs / "pipeline.log"  # single rotating file, not one per run
     setup_logging(level=args.log_level, log_file=log_file)
-
-    run_date = datetime.strptime(args.date, "%Y-%m-%d").date() if args.date else date.today()
 
     stages = args.stages or ALL_STAGES
     if args.skip_ml and "ml" in stages:
         stages = [s for s in stages if s != "ml"]
 
+    dates = resolve_dates(args)
+    n = len(dates)
+
     logger.info("=" * 60)
     logger.info("Currency Intelligence Pipeline")
-    logger.info("Run date : %s", run_date)
+    logger.info("Dates    : %s → %s (%d day(s))", dates[0], dates[-1], n)
     logger.info("Stages   : %s", stages)
     logger.info("=" * 60)
 
     spark = None
 
     try:
-        # Initialise Spark once for all Spark stages
         if any(s in stages for s in ["bronze", "silver", "gold"]):
             from src.utils.spark_utils import get_spark_session
 
@@ -198,28 +273,50 @@ def main() -> int:
             )
 
         if "ingestion" in stages:
-            logger.info("── Stage: ingestion ──")
-            stage_ingestion(cfg, run_date)
+            logger.info("── Stage: ingestion (%d dates) ──", n)
+            for i, d in enumerate(dates, 1):
+                logger.info("  [%d/%d] ingesting %s", i, n, d)
+                try:
+                    stage_ingestion(cfg, d, force=args.force_ingest)
+                except Exception as exc:
+                    # Log and continue — a missing holiday/weekend date
+                    # from the API should not abort the whole backfill
+                    logger.warning("  Ingestion failed for %s: %s (skipping)", d, exc)
+            logger.info("✓ Ingestion complete")
 
         if "bronze" in stages:
-            logger.info("── Stage: bronze ──")
-            stage_bronze(cfg, spark, run_date)
+            logger.info("── Stage: bronze (%d dates) ──", n)
+            for i, d in enumerate(dates, 1):
+                raw_dir = cfg.paths.raw / d.isoformat()
+                if not raw_dir.exists():
+                    logger.warning("  No raw data for %s, skipping bronze", d)
+                    continue
+                logger.info("  [%d/%d] bronze %s", i, n, d)
+                try:
+                    stage_bronze(cfg, spark, d)
+                except Exception as exc:
+                    logger.warning("  Bronze failed for %s: %s (skipping)", d, exc)
+            logger.info("✓ Bronze complete")
 
         if "silver" in stages:
             logger.info("── Stage: silver ──")
             stage_silver(cfg, spark)
+            logger.info("✓ Silver complete")
 
         if "gold" in stages:
             logger.info("── Stage: gold ──")
             stage_gold(cfg, spark)
+            logger.info("✓ Gold complete")
 
         if "ml" in stages:
             logger.info("── Stage: ml ──")
             stage_ml(cfg)
+            logger.info("✓ ML complete")
 
         if "warehouse" in stages:
             logger.info("── Stage: warehouse ──")
             stage_warehouse(cfg)
+            logger.info("✓ Warehouse complete")
 
         logger.info("=" * 60)
         logger.info("Pipeline completed successfully  ✓")

@@ -1,12 +1,11 @@
-"""src/ingestion/fetch_rates.py
+"""src/ingestion/fetch_rates.py.
 
-Ingestion stage: fetch live exchange rates and persist raw JSON.
+Ingestion stage: fetch exchange rates from the Frankfurter API
+and persist to a single JSONL file per base currency.
 
-The raw file is written as:
-  <raw_path>/<YYYY-MM-DD>/rates_<base>.json
-
-Idempotency: if the file for today already exists the fetch is
-skipped unless ``force=True`` is passed.
+Storage layout
+--------------
+    data/raw/rates_USD.jsonl   <- one JSON line per date, upserted on each run
 """
 
 from __future__ import annotations
@@ -26,131 +25,109 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _build_url(base_url: str, run_date: date) -> str:
+    today = date.today()
+    if run_date >= today:
+        return f"{base_url}/latest"
+    return f"{base_url}/{run_date.isoformat()}"
+
+
 def fetch_exchange_rates(
     base_currency: str,
     target_currencies: list[str],
     base_url: str,
+    run_date: date,
     timeout: int = 30,
     retry_attempts: int = 3,
     retry_backoff: int = 5,
 ) -> dict[str, Any]:
-    """Fetch exchange rates for *base_currency* from the public API.
+    """Fetch exchange rates from Frankfurter for *run_date*.
 
-    Parameters
-    ----------
-    base_currency:
-        The base currency code (e.g. ``"USD"``).
-    target_currencies:
-        List of target currency codes to extract from the response.
-    base_url:
-        API endpoint template - ``{base_currency}`` will be appended.
-    timeout:
-        HTTP request timeout in seconds.
-    retry_attempts:
-        Number of retry attempts on transient failures.
-    retry_backoff:
-        Seconds to wait between retries.
-
-    Returns
-    -------
-    dict
-        Normalised payload with keys: ``base``, ``date``, ``rates``,
-        ``fetched_at``.
-
-    Raises
-    ------
-    RuntimeError
-        When all retry attempts are exhausted.
-
+    Returns a normalised dict: ``base``, ``date``, ``rates``, ``fetched_at``.
+    Raises RuntimeError when all retry attempts are exhausted.
     """
-    url = f"{base_url}/{base_currency}"
+    url = _build_url(base_url, run_date)
+    params = {"from": base_currency, "to": ",".join(target_currencies)}
     last_exc: Exception = RuntimeError("No attempts made")
 
     for attempt in range(1, retry_attempts + 1):
         try:
             logger.info(
-                "Fetching rates [attempt %d/%d]: %s",
+                "Fetching rates [%d/%d]: %s (date=%s)",
                 attempt,
                 retry_attempts,
                 url,
+                run_date,
             )
-            response = requests.get(url, timeout=timeout)
+            response = requests.get(url, params=params, timeout=timeout)
             response.raise_for_status()
             payload = response.json()
 
-            rates_all: dict[str, float] = payload.get("rates", {})
-            rates_filtered = {ccy: rates_all[ccy] for ccy in target_currencies if ccy in rates_all}
-
-            missing = set(target_currencies) - set(rates_filtered)
+            rates: dict[str, float] = payload.get("rates", {})
+            missing = set(target_currencies) - set(rates)
             if missing:
-                logger.warning("Currencies not found in API response: %s", missing)
+                logger.warning("Currencies missing for %s: %s", run_date, missing)
 
             result = {
                 "base": base_currency,
-                "date": payload.get("time_last_update_utc", str(date.today())),
-                "rates": rates_filtered,
+                "date": payload.get("date", run_date.isoformat()),
+                "rates": rates,
                 "fetched_at": datetime.now(UTC).isoformat(),
                 "source": base_url,
             }
-            logger.info("Fetched %d rate(s) for base=%s", len(rates_filtered), base_currency)
+            logger.info(
+                "Fetched %d rate(s) base=%s date=%s",
+                len(rates),
+                base_currency,
+                result["date"],
+            )
             return result
 
         except (requests.RequestException, ValueError) as exc:
             last_exc = exc
-            logger.warning(
-                "Fetch attempt %d failed: %s. Retrying in %ds…",
-                attempt,
-                exc,
-                retry_backoff,
-            )
+            logger.warning("Attempt %d failed for %s: %s", attempt, run_date, exc)
             if attempt < retry_attempts:
                 time.sleep(retry_backoff)
 
-    msg = f"All {retry_attempts} fetch attempts failed for {base_currency}"
+    msg = f"All {retry_attempts} fetch attempts failed for {base_currency} on {run_date}"
     raise RuntimeError(msg) from last_exc
 
 
 def save_raw_rates(
     payload: dict[str, Any],
     raw_dir: Path,
-    run_date: date | None = None,
     force: bool = False,
 ) -> Path:
-    """Persist the raw API payload as a JSON file.
+    """Upsert one date record into ``data/raw/rates_<BASE>.jsonl``.
 
-    Parameters
-    ----------
-    payload:
-        The dict returned by :func:`fetch_exchange_rates`.
-    raw_dir:
-        Root directory for raw data (``data/raw``).
-    run_date:
-        Partition date (defaults to today UTC).
-    force:
-        Overwrite existing file even if it exists.
-
-    Returns
-    -------
-    Path
-        Full path of the written JSON file.
-
+    Idempotent: re-running the same date replaces the existing record.
     """
-    run_date = run_date or date.today()
-    date_str = run_date.isoformat()
-    base = payload["base"]
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    record_date = payload["date"]
+    out_file = raw_dir / f"rates_{payload['base']}.jsonl"
 
-    out_dir = raw_dir / date_str
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"rates_{base}.json"
+    existing: dict[str, dict] = {}
+    if out_file.exists():
+        with open(out_file, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    try:
+                        rec = json.loads(line)
+                        existing[rec["date"]] = rec
+                    except json.JSONDecodeError:
+                        pass
 
-    if out_file.exists() and not force:
-        logger.info("Raw file already exists, skipping: %s", out_file)
+    if record_date in existing and not force:
+        logger.info("Record for %s already exists, skipping", record_date)
         return out_file
 
+    existing[record_date] = payload
     with open(out_file, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2)
+        for rec in sorted(existing.values(), key=lambda r: r["date"]):
+            fh.write(json.dumps(rec) + "\n")
 
-    logger.info("Saved raw rates → %s", out_file)
+    logger.info("Saved raw rates -> %s (%d total records)", out_file.name, len(existing))
     return out_file
 
 
@@ -159,22 +136,20 @@ def run_ingestion(
     target_currencies: list[str],
     raw_dir: Path,
     base_url: str,
+    run_date: date,
     timeout: int = 30,
     retry_attempts: int = 3,
     retry_backoff: int = 5,
     force: bool = False,
-    run_date: date | None = None,
 ) -> Path:
-    """Orchestrate fetch + persist in one call.
-
-    Returns the Path of the saved JSON file.
-    """
+    """Orchestrate fetch + persist for a single date."""
     payload = fetch_exchange_rates(
         base_currency=base_currency,
         target_currencies=target_currencies,
         base_url=base_url,
+        run_date=run_date,
         timeout=timeout,
         retry_attempts=retry_attempts,
         retry_backoff=retry_backoff,
     )
-    return save_raw_rates(payload, raw_dir, run_date=run_date, force=force)
+    return save_raw_rates(payload, raw_dir, force=force)

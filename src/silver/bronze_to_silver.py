@@ -1,4 +1,4 @@
-"""src/silver/bronze_to_silver.py
+"""src/silver/bronze_to_silver.py.
 
 Silver layer: validate and clean bronze data, build canonical
 currency-pair names, compute daily log-returns, and write Parquet.
@@ -111,13 +111,10 @@ def add_processed_timestamp(df: DataFrame) -> DataFrame:
 
 
 def read_all_bronze(spark: SparkSession, bronze_dir: Path) -> DataFrame:
-    """Read the entire bronze Parquet lake (all dates).
-
-    The partition column ``ingestion_date`` is reconstructed from the
-    folder name via Spark's automatic partition discovery.
-    """
-    df = read_parquet(spark, str(bronze_dir))
-    logger.info("Read bronze lake: %d rows", df.count())
+    """Read the bronze Parquet file."""
+    bronze_file = str(bronze_dir / "bronze.parquet")
+    df = read_parquet(spark, bronze_file)
+    logger.info("Read bronze: %d rows", df.count())
     return df
 
 
@@ -162,12 +159,14 @@ def transform_to_silver(
 
 
 def write_silver(df: DataFrame, silver_dir: Path) -> None:
-    """Write the full silver dataset, partitioned by ``date``.
+    """Write the full silver dataset as a single Parquet file.
 
-    The entire silver dataset is overwritten to ensure idempotency
-    when historical data is reprocessed.
+    At the scale of a few currency pairs over months/years the entire
+    silver dataset fits comfortably in one file.  Coalescing to 1 avoids
+    the small-file explosion that date-partitioning causes with Spark's
+    default task parallelism.
     """
-    write_parquet(df, str(silver_dir), partition_by=["date"], mode="overwrite")
+    write_parquet(df.coalesce(1), str(silver_dir), partition_by=None, mode="overwrite")
     logger.info("Silver layer written → %s", silver_dir)
 
 

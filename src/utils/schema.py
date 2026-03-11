@@ -1,4 +1,4 @@
-"""src/utils/schema.py
+"""src/utils/schema.py.
 
 Explicit PySpark schemas for every medallion layer.
 

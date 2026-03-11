@@ -1,4 +1,4 @@
-"""src/utils/spark_utils.py
+"""src/utils/spark_utils.py.
 
 Spark session factory and reusable transformation helpers.
 
@@ -96,6 +96,25 @@ def deduplicate(df: DataFrame, partition_cols: list[str], order_col: str) -> Dat
     return df.withColumn("_rn", F.row_number().over(window)).filter(F.col("_rn") == 1).drop("_rn")
 
 
+def _orderable(df: DataFrame, col_name: str) -> F.Column:
+    """Return an orderable (numeric) expression for *col_name*.
+
+    Spark 4.x no longer allows ``CAST(DATE AS BIGINT)`` in window
+    ORDER BY clauses.  Use ``unix_date()`` for DateType columns and
+    ``unix_timestamp()`` for TimestampType so the window always
+    orders over a plain integer, which is safe across all Spark versions.
+    """
+    from pyspark.sql.types import DateType, TimestampType
+
+    col_type = df.schema[col_name].dataType
+    if isinstance(col_type, DateType):
+        return F.unix_date(F.col(col_name))
+    if isinstance(col_type, TimestampType):
+        return F.unix_timestamp(F.col(col_name))
+    # Already numeric — use as-is
+    return F.col(col_name)
+
+
 def rolling_average(
     df: DataFrame,
     partition_cols: list[str],
@@ -113,7 +132,7 @@ def rolling_average(
     partition_cols:
         Columns to partition the window by (e.g. ``["currency_pair"]``).
     order_col:
-        Timestamp or numeric column to order within each partition.
+        Date, timestamp, or numeric column to order within each partition.
     value_col:
         Column to average.
     window_days:
@@ -129,7 +148,7 @@ def rolling_average(
     alias = alias or f"ma_{window_days}"
     window = (
         Window.partitionBy(*partition_cols)
-        .orderBy(F.col(order_col).cast("long"))
+        .orderBy(_orderable(df, order_col))
         .rowsBetween(-(window_days - 1), 0)
     )
     return df.withColumn(alias, F.avg(F.col(value_col)).over(window))
@@ -147,7 +166,7 @@ def rolling_stddev(
     alias = alias or f"stddev_{window_days}"
     window = (
         Window.partitionBy(*partition_cols)
-        .orderBy(F.col(order_col).cast("long"))
+        .orderBy(_orderable(df, order_col))
         .rowsBetween(-(window_days - 1), 0)
     )
     return df.withColumn(alias, F.stddev(F.col(value_col)).over(window))

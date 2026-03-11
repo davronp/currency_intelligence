@@ -1,6 +1,6 @@
 # 💱 Currency Intelligence Platform
 
-A production-grade data engineering platform that ingests live exchange rates for **USD/EUR**, **USD/SEK**, and **USD/UZS**, runs a full **Medallion architecture** data pipeline, trains **Prophet time-series forecasts**, loads curated data into a **DuckDB warehouse**, and serves everything through an interactive **Streamlit dashboard**.
+A production-grade data engineering platform that ingests live exchange rates for **USD/EUR**, **USD/SEK**, and **USD/GBP**, runs a full **Medallion architecture** data pipeline, trains **Prophet time-series forecasts**, loads curated data into a **DuckDB warehouse**, and serves everything through an interactive **Streamlit dashboard**.
 
 ---
 
@@ -128,6 +128,9 @@ python run_pipeline.py --date 2024-01-15
 # Skip ML forecasting (faster)
 python run_pipeline.py --skip-ml
 
+# Initial backfill - last 90 days (gives Prophet plenty of training data)
+python run_pipeline.py --backfill-days 90
+
 # Verbose logging
 python run_pipeline.py --log-level DEBUG
 ```
@@ -168,7 +171,7 @@ All parameters are in `config/settings.yaml`. Key settings:
 ```yaml
 currencies:
   base: USD
-  targets: [EUR, SEK, UZS]   # Add or remove currencies here
+  targets: [EUR, SEK, GBP]   # Add or remove currencies here
 
 gold:
   rolling_windows: [7, 30, 90]

@@ -1,4 +1,4 @@
-"""src/ml/forecast.py
+"""src/ml/forecast.py.
 
 ML pipeline: train a Facebook Prophet model per currency pair
 and persist predictions as Parquet.

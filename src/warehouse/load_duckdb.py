@@ -1,4 +1,4 @@
-"""src/warehouse/load_duckdb.py
+"""src/warehouse/load_duckdb.py.
 
 Warehouse layer: load curated gold Parquet tables and ML forecasts
 into DuckDB for fast analytical queries.
@@ -58,9 +58,9 @@ def load_parquet_as_table(
     conn: duckdb.DuckDBPyConnection,
     table_name: str,
     parquet_path: Path,
-    partition_discovery: bool = True,
+    hive_partitioned: bool = False,
 ) -> int:
-    """(Re)create a DuckDB table backed by a Parquet lake.
+    """(Re)create a DuckDB table backed by a Parquet dataset.
 
     The table is always **replaced** so the operation is idempotent.
 
@@ -72,8 +72,10 @@ def load_parquet_as_table(
         Destination table name.
     parquet_path:
         Directory or file path with Parquet data.
-    partition_discovery:
-        When True, use ``**/*.parquet`` glob to pick up partitioned lakes.
+    hive_partitioned:
+        When True, uses a ``**/*.parquet`` glob with
+        ``hive_partitioning=true`` (Bronze layer).
+        When False, reads all ``.parquet`` files directly (Silver/Gold).
 
     Returns
     -------
@@ -85,16 +87,33 @@ def load_parquet_as_table(
         logger.warning("Parquet path does not exist, skipping: %s", parquet_path)
         return 0
 
-    glob = f"{parquet_path}/**/*.parquet" if partition_discovery else str(parquet_path)
+    if parquet_path.is_file():
+        glob = str(parquet_path)
+        hive_flag = "false"
+    elif hive_partitioned:
+        glob = f"{parquet_path}/**/*.parquet"
+        hive_flag = "true"
+    else:
+        glob = f"{parquet_path}/*.parquet"
+        hive_flag = "false"
 
     sql = f"""
         CREATE OR REPLACE TABLE {table_name} AS
-        SELECT * FROM read_parquet('{glob}', hive_partitioning=true);
+        SELECT * FROM read_parquet('{glob}', hive_partitioning={hive_flag});
     """
     conn.execute(sql)
     row_count: int = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
     logger.info("Loaded table '%s': %d rows", table_name, row_count)
     return row_count
+
+
+def _table_exists(conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
+    """Return True if *table_name* exists in the current DuckDB catalog."""
+    result = conn.execute(
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = ?",
+        [table_name],
+    ).fetchone()
+    return result[0] > 0
 
 
 def create_analytical_views(conn: duckdb.DuckDBPyConnection) -> None:
@@ -103,9 +122,10 @@ def create_analytical_views(conn: duckdb.DuckDBPyConnection) -> None:
     Views
     -----
     v_latest_rates:
-        Most recent rate per currency pair.
+        Most recent rate per currency pair (always created).
     v_forecast_summary:
-        Next-30-day forecast with risk flags.
+        Next-30-day forecast with uncertainty range.
+        Only created when the ``ml_forecasts`` table exists.
     """
     conn.execute("""
         CREATE OR REPLACE VIEW v_latest_rates AS
@@ -122,22 +142,29 @@ def create_analytical_views(conn: duckdb.DuckDBPyConnection) -> None:
         WHERE date = (SELECT MAX(date) FROM gold_exchange_rates)
         ORDER BY currency_pair;
     """)
+    logger.info("Analytical view created: v_latest_rates")
 
-    conn.execute("""
-        CREATE OR REPLACE VIEW v_forecast_summary AS
-        SELECT
-            f.currency_pair,
-            f.forecast_date,
-            f.yhat         AS forecast_rate,
-            f.yhat_lower   AS lower_bound,
-            f.yhat_upper   AS upper_bound,
-            f.yhat_upper - f.yhat_lower AS uncertainty_range,
-            f.model_trained_at
-        FROM ml_forecasts f
-        ORDER BY f.currency_pair, f.forecast_date;
-    """)
-
-    logger.info("Analytical views created: v_latest_rates, v_forecast_summary")
+    if _table_exists(conn, "ml_forecasts"):
+        conn.execute("""
+            CREATE OR REPLACE VIEW v_forecast_summary AS
+            SELECT
+                f.currency_pair,
+                f.forecast_date,
+                f.yhat         AS forecast_rate,
+                f.yhat_lower   AS lower_bound,
+                f.yhat_upper   AS upper_bound,
+                f.yhat_upper - f.yhat_lower AS uncertainty_range,
+                f.model_trained_at
+            FROM ml_forecasts f
+            ORDER BY f.currency_pair, f.forecast_date;
+        """)
+        logger.info("Analytical view created: v_forecast_summary")
+    else:
+        logger.warning(
+            "Skipping v_forecast_summary - ml_forecasts table not loaded "
+            "(pipeline needs ≥%d days of data to train Prophet models)",
+            30,
+        )
 
 
 def run_warehouse(
@@ -181,7 +208,7 @@ def run_warehouse(
         conn,
         table_names["exchange_rates"],
         gold_dir,
-        partition_discovery=True,
+        hive_partitioned=False,  # Gold is a single coalesced file
     )
 
     forecast_file = forecasts_dir / "forecasts.parquet"
@@ -190,7 +217,7 @@ def run_warehouse(
             conn,
             table_names["forecasts"],
             forecast_file,
-            partition_discovery=False,
+            hive_partitioned=False,
         )
     else:
         logger.warning("Forecasts file not found: %s", forecast_file)

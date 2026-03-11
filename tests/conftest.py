@@ -1,4 +1,4 @@
-"""tests/conftest.py
+"""tests/conftest.py.
 
 Shared pytest fixtures for the Currency Intelligence test suite.
 
