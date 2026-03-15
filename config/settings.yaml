@@ -1,21 +1,17 @@
 #
 #  Currency Intelligence Platform - Settings
 #
-
 project:
   name: currency-intelligence
   version: "1.0.0"
   timezone: UTC
-
-
 currencies:
   base: USD
   targets:
     - EUR
     - SEK
     - GBP
-
-
+    - NOK
 api:
   # Primary: Frankfurter (ECB data, free, no key, historical back to 1999)
   provider: frankfurter
@@ -23,18 +19,14 @@ api:
   timeout_seconds: 30
   retry_attempts: 3
   retry_backoff_seconds: 5
-
-
 paths:
-  raw:       data/raw
-  bronze:    data/bronze
-  silver:    data/silver
-  gold:      data/gold
+  raw: data/raw
+  bronze: data/bronze
+  silver: data/silver
+  gold: data/gold
   forecasts: data/forecasts
   warehouse: data/warehouse
-  logs:      logs
-
-
+  logs: logs
 spark:
   app_name: CurrencyIntelligence
   master: local[*]
@@ -43,21 +35,15 @@ spark:
   configs:
     spark.sql.parquet.compression.codec: snappy
     spark.sql.session.timeZone: UTC
-
-
 silver:
   min_valid_rate: 0.000001
   max_valid_rate: 100000.0
-
-
 gold:
   rolling_windows:
     - 7
     - 30
     - 90
   volatility_window: 30
-
-
 ml:
   forecast_horizon_days: 30
   prophet:
@@ -68,11 +54,9 @@ ml:
     seasonality_prior_scale: 10.0
     interval_width: 0.95
   min_training_rows: 30
-
-
 warehouse:
   db_file: data/warehouse/currency_intelligence.duckdb
   tables:
-    exchange_rates:   gold_exchange_rates
-    analytics:        gold_analytics
-    forecasts:        ml_forecasts
+    exchange_rates: gold_exchange_rates
+    analytics: gold_analytics
+    forecasts: ml_forecasts

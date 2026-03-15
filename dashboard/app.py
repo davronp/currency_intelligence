@@ -47,7 +47,7 @@ available_pairs = cfg.currencies.pairs
 selected_pairs = st.sidebar.multiselect(
     "Currency Pairs",
     options=available_pairs,
-    default=available_pairs[:2],
+    default=available_pairs,
 )
 
 st.sidebar.markdown("---")
