@@ -58,5 +58,4 @@ warehouse:
   db_file: data/warehouse/currency_intelligence.duckdb
   tables:
     exchange_rates: gold_exchange_rates
-    analytics: gold_analytics
     forecasts: ml_forecasts

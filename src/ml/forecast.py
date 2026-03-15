@@ -69,6 +69,7 @@ def train_prophet(
     daily_seasonality: bool = False,
     changepoint_prior_scale: float = 0.05,
     seasonality_prior_scale: float = 10.0,
+    interval_width: float = 0.95,
 ) -> Prophet:
     """Fit a Prophet model on the prepared DataFrame.
 
@@ -90,6 +91,7 @@ def train_prophet(
         daily_seasonality=daily_seasonality,
         changepoint_prior_scale=changepoint_prior_scale,
         seasonality_prior_scale=seasonality_prior_scale,
+        interval_width=interval_width,
     )
     model.fit(df_prophet)
     return model
@@ -149,7 +151,7 @@ def forecast_pair(
         Flat forecast rows, or ``None`` if skipped.
 
     """
-    prophet_kwargs = prophet_kwargs or {}
+    prophet_kwargs = {**(prophet_kwargs or {}), "interval_width": _interval_width}
     n_rows = len(pair_df)
 
     if n_rows < min_training_rows:

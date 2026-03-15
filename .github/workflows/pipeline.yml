@@ -31,8 +31,6 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Install Stan (required by Prophet)
-        run: python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"
       - name: Run tests
         run: |
           pytest tests/test_ingestion.py tests/test_bronze.py tests/test_silver.py tests/test_gold.py \
