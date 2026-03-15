@@ -92,4 +92,7 @@ Thumbs.db
 # Pre-commit
 .pre-commit-config.yaml.cache
 
-data/
+data/raw/
+data/bronze/
+data/silver/
+data/logs/

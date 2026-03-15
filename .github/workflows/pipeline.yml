@@ -42,8 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
     needs: [lint, test]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -57,12 +61,10 @@ jobs:
         run: python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"
       - name: Run pipeline
         run: python run_pipeline.py
-      - name: Upload pipeline artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-data-${{ github.run_id }}
-          path: |
-            data/gold/
-            data/forecasts/
-            data/warehouse/
-          retention-days: 60
+      - name: Commit data to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/gold/ data/forecasts/ data/warehouse/
+          git diff --staged --quiet || git commit -m "chore: update pipeline data [skip ci]"
+          git push
