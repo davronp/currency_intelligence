@@ -166,11 +166,11 @@ def transform_to_gold(
 def write_gold(df: DataFrame, gold_dir: Path) -> None:
     """Write the gold dataset as a single Parquet file.
 
-    Coalescing to 1 keeps the lake lean — the full gold dataset for
+    Coalescing to 1 keeps the lake lean - the full gold dataset for
     years of daily data for a handful of pairs is still well under 50 MB.
     """
     write_parquet(df.coalesce(1), str(gold_dir), partition_by=None, mode="overwrite")
-    logger.info("Gold layer written → %s", gold_dir)
+    logger.info("Gold layer written -> %s", gold_dir)
 
 
 def run_gold(
@@ -180,7 +180,7 @@ def run_gold(
     rolling_windows: list[int] = (7, 30, 90),
     volatility_window: int = 30,
 ) -> DataFrame:
-    """End-to-end gold pipeline: read silver → transform → write.
+    """End-to-end gold pipeline: read silver -> transform -> write.
 
     Returns the gold DataFrame for downstream chaining.
     """

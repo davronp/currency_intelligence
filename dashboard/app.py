@@ -52,7 +52,7 @@ selected_pairs = st.sidebar.multiselect(
 
 st.sidebar.markdown("---")
 st.sidebar.info(
-    "Data layers: **Raw → Bronze → Silver → Gold**  \nForecasting: **Prophet**  \nWarehouse: **DuckDB**"
+    "Data layers: **Raw -> Bronze -> Silver -> Gold**  \nForecasting: **Prophet**  \nWarehouse: **DuckDB**"
 )
 
 
@@ -215,7 +215,7 @@ with tab3:
                         )
                     )
             fig.update_layout(
-                title=f"{pair} — Moving Averages",
+                title=f"{pair} - Moving Averages",
                 template="plotly_dark",
                 height=350,
                 legend={"orientation": "h"},
@@ -291,7 +291,7 @@ with tab4:
             )
 
             fig.update_layout(
-                title=f"{pair} — 30-Day Forecast",
+                title=f"{pair} - 30-Day Forecast",
                 template="plotly_dark",
                 height=380,
                 legend={"orientation": "h"},

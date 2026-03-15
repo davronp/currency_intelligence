@@ -227,7 +227,7 @@ def resolve_dates(args: argparse.Namespace) -> list[date]:
     else:
         dates = [today]
 
-    # Frankfurter only has weekday data — skip weekends to avoid dupes
+    # Frankfurter only has weekday data - skip weekends to avoid dupes
     weekday_dates = _skip_weekends(dates)
     skipped = len(dates) - len(weekday_dates)
     if skipped:
@@ -257,7 +257,7 @@ def main() -> int:
 
     logger.info("=" * 60)
     logger.info("Currency Intelligence Pipeline")
-    logger.info("Dates    : %s → %s (%d day(s))", dates[0], dates[-1], n)
+    logger.info("Dates    : %s -> %s (%d day(s))", dates[0], dates[-1], n)
     logger.info("Stages   : %s", stages)
     logger.info("=" * 60)
 
@@ -282,7 +282,7 @@ def main() -> int:
                 try:
                     stage_ingestion(cfg, d, force=args.force_ingest)
                 except Exception as exc:
-                    # Log and continue — a missing holiday/weekend date
+                    # Log and continue - a missing holiday/weekend date
                     # from the API should not abort the whole backfill
                     logger.warning("  Ingestion failed for %s: %s (skipping)", d, exc)
             logger.info("✓ Ingestion complete")

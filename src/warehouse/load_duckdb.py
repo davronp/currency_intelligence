@@ -4,7 +4,7 @@ Warehouse layer: load curated gold Parquet tables and ML forecasts
 into DuckDB for fast analytical queries.
 
 DuckDB can read Parquet natively via ``read_parquet()`` so data is
-never duplicated on disk — the warehouse is a logical view layer
+never duplicated on disk - the warehouse is a logical view layer
 backed by the Parquet lake files.
 """
 
@@ -203,7 +203,7 @@ def run_warehouse(
     forecasts_dir: Path,
     table_names: dict[str, str] | None = None,
 ) -> None:
-    """Full warehouse pipeline: connect → load tables → create views → close.
+    """Full warehouse pipeline: connect -> load tables -> create views -> close.
 
     Parameters
     ----------

@@ -17,9 +17,9 @@ def spark() -> SparkSession:
     """Provide a local SparkSession for the entire test session.
 
     Configuration is minimal to keep tests fast:
-    - ``local[2]`` — two cores
-    - ``shuffle.partitions=2`` — low for small test data
-    - ``WARN`` log level — suppress Spark's verbose INFO output
+    - ``local[2]`` - two cores
+    - ``shuffle.partitions=2`` - low for small test data
+    - ``WARN`` log level - suppress Spark's verbose INFO output
     """
     session = (
         SparkSession.builder.appName("CurrencyIntelligence-Tests")

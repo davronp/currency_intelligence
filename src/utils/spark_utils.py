@@ -39,7 +39,7 @@ def get_spark_session(
     master:
         Spark master URL (``local[*]`` for local mode).
     shuffle_partitions:
-        ``spark.sql.shuffle.partitions`` — keep low for local dev.
+        ``spark.sql.shuffle.partitions`` - keep low for local dev.
     log_level:
         Spark log level string.
     extra_configs:
@@ -110,7 +110,7 @@ def _orderable(df: DataFrame, col_name: str) -> F.Column:
         return F.unix_date(F.col(col_name))
     if isinstance(col_type, TimestampType):
         return F.unix_timestamp(F.col(col_name))
-    # Already numeric — use as-is
+    # Already numeric - use as-is
     return F.col(col_name)
 
 
@@ -211,7 +211,7 @@ def write_parquet(
     if partition_by:
         writer = writer.partitionBy(*partition_by)
     writer.save(path)
-    logger.info("Wrote Parquet → %s (mode=%s)", path, mode)
+    logger.info("Wrote Parquet -> %s (mode=%s)", path, mode)
 
 
 def read_parquet(spark: SparkSession, path: str, schema: StructType | None = None) -> DataFrame:

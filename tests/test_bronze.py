@@ -132,7 +132,7 @@ class TestLoadRawFiles:
             load_raw_files(spark, tmp_path)
 
     def test_no_subdirectories_required(self, spark, tmp_path):
-        """JSONL files sit directly in raw_dir — no date subdirectories."""
+        """JSONL files sit directly in raw_dir - no date subdirectories."""
         _write_jsonl(tmp_path, "USD", [_make_record(date(2024, 1, 15))])
         subdirs = [p for p in tmp_path.iterdir() if p.is_dir()]
         assert subdirs == []

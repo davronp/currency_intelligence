@@ -77,7 +77,7 @@ def add_currency_pair(df: DataFrame) -> DataFrame:
 
 
 def add_date_column(df: DataFrame) -> DataFrame:
-    """Rename ``ingestion_date`` → ``date`` for semantic clarity."""
+    """Rename ``ingestion_date`` -> ``date`` for semantic clarity."""
     return df.withColumnRenamed("ingestion_date", "date")
 
 
@@ -167,7 +167,7 @@ def write_silver(df: DataFrame, silver_dir: Path) -> None:
     default task parallelism.
     """
     write_parquet(df.coalesce(1), str(silver_dir), partition_by=None, mode="overwrite")
-    logger.info("Silver layer written → %s", silver_dir)
+    logger.info("Silver layer written -> %s", silver_dir)
 
 
 def run_silver(
@@ -177,7 +177,7 @@ def run_silver(
     min_rate: float = 1e-6,
     max_rate: float = 1e5,
 ) -> DataFrame:
-    """End-to-end silver pipeline: read bronze → transform → write.
+    """End-to-end silver pipeline: read bronze -> transform -> write.
 
     Returns the silver DataFrame for downstream chaining.
     """

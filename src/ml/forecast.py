@@ -191,7 +191,7 @@ def run_forecasting(
     prophet_kwargs: dict | None = None,
     interval_width: float = 0.95,
 ) -> pd.DataFrame:
-    """Full ML pipeline: read gold Parquet → train per pair → save forecasts.
+    """Full ML pipeline: read gold Parquet -> train per pair -> save forecasts.
 
     Uses Pandas directly (no Spark) because Prophet is a single-machine
     library and the gold dataset fits comfortably in memory.
@@ -253,6 +253,6 @@ def run_forecasting(
     forecasts_dir.mkdir(parents=True, exist_ok=True)
     out_path = forecasts_dir / "forecasts.parquet"
     combined.to_parquet(out_path, index=False)
-    logger.info("Forecasts saved → %s (%d rows)", out_path, len(combined))
+    logger.info("Forecasts saved -> %s (%d rows)", out_path, len(combined))
 
     return combined
