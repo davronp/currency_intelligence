@@ -60,7 +60,7 @@ class TestParseJsonlFile:
             ],
         )
         rows = _parse_jsonl_file(jf)
-        # 2 dates × 3 currencies = 6 rows
+        # 2 dates x 3 currencies = 6 rows
         assert len(rows) == 6
 
     def test_row_has_required_keys(self, tmp_path):
@@ -86,9 +86,9 @@ class TestParseJsonlFile:
 
     def test_malformed_line_skipped(self, tmp_path):
         out = tmp_path / "rates_USD.jsonl"
-        out.write_text(
-            '{"base":"USD","date":"2024-01-15","rates":{"EUR":0.92},"fetched_at":"2024-01-15T10:00:00+00:00","source":"test"}\nnot valid json\n'
-        )
+        valid = '{"base":"USD","date":"2024-01-15","rates":{"EUR":0.92},'
+        valid += '"fetched_at":"2024-01-15T10:00:00+00:00","source":"test"}'
+        out.write_text(valid + "\nnot valid json\n")
         rows = _parse_jsonl_file(out)
         assert len(rows) == 1
 
@@ -104,7 +104,7 @@ class TestParseJsonlFile:
 
 class TestLoadRawFiles:
     def test_raises_when_no_jsonl_files(self, spark, tmp_path):
-        with pytest.raises(FileNotFoundError, match="No rates_\\*.jsonl"):
+        with pytest.raises(FileNotFoundError, match=r"No rates_\*.jsonl"):
             load_raw_files(spark, tmp_path)
 
     def test_loads_single_jsonl_file(self, spark, tmp_path):
@@ -117,7 +117,7 @@ class TestLoadRawFiles:
             ],
         )
         df = load_raw_files(spark, tmp_path)
-        # 2 dates × 2 currencies = 4 rows
+        # 2 dates x 2 currencies = 4 rows
         assert df.count() == 4
 
     def test_columns_match_bronze_schema(self, spark, tmp_path):

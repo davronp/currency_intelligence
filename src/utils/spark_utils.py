@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from pyspark.sql import DataFrame, SparkSession, Window
 from pyspark.sql import functions as F
+from pyspark.sql.types import DateType, TimestampType
 
 from src.utils.logger import get_logger
 
@@ -104,8 +105,6 @@ def _orderable(df: DataFrame, col_name: str) -> F.Column:
     ``unix_timestamp()`` for TimestampType so the window always
     orders over a plain integer, which is safe across all Spark versions.
     """
-    from pyspark.sql.types import DateType, TimestampType
-
     col_type = df.schema[col_name].dataType
     if isinstance(col_type, DateType):
         return F.unix_date(F.col(col_name))
@@ -178,7 +177,7 @@ def z_score(
     partition_cols: list[str],
     alias: str = "z_score",
 ) -> DataFrame:
-    """Append a z-score column (value − mean) / stddev
+    """Append a z-score column (value - mean) / stddev
     computed within *partition_cols*.
     """
     window = Window.partitionBy(*partition_cols)

@@ -80,21 +80,26 @@ def load_forecasts() -> pd.DataFrame | None:
     try:
         df = pd.read_parquet(fc_path)
         df["forecast_date"] = pd.to_datetime(df["forecast_date"])
-        return df
     except Exception as e:
         st.error(f"Could not load forecast data: {e}")
         return None
+    else:
+        return df
 
 
-@st.cache_resource
-def get_duckdb_conn():
+def _query_duckdb(sql: str) -> pd.DataFrame | None:
+    """Open a read-only DuckDB connection, run *sql*, close it, return result."""
     db_path = cfg.warehouse.db_file
     if not db_path.exists():
         return None
     try:
-        import duckdb
+        import duckdb  # noqa: PLC0415
 
-        return duckdb.connect(str(db_path), read_only=True)
+        conn = duckdb.connect(str(db_path), read_only=True)
+        try:
+            return conn.execute(sql).df()
+        finally:
+            conn.close()
     except Exception:
         return None
 
@@ -316,8 +321,7 @@ with tab4:
 with tab5:
     st.subheader("🐥 DuckDB SQL Explorer")
 
-    conn = get_duckdb_conn()
-    if conn is None:
+    if not cfg.warehouse.db_file.exists():
         st.info(
             "DuckDB warehouse not found.  Run the full pipeline first:\n\n"
             "```bash\npython run_pipeline.py\n```"
@@ -346,18 +350,17 @@ LIMIT 20;""",
         user_sql = st.text_area("SQL", value=default_sql, height=140)
 
         if st.button("▶ Run Query", type="primary"):
-            try:
-                result = conn.execute(user_sql).df()
+            result = _query_duckdb(user_sql)
+            if result is None:
+                st.error("Query failed or warehouse unavailable.")
+            else:
                 st.success(f"{len(result)} row(s) returned")
                 st.dataframe(result, width="stretch")
-            except Exception as e:
-                st.error(f"Query error: {e}")
 
         st.markdown("**Available tables & views**")
-        try:
-            tables = conn.execute(
-                "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema='main' ORDER BY 1"
-            ).df()
+        tables = _query_duckdb(
+            "SELECT table_name, table_type FROM information_schema.tables "
+            "WHERE table_schema='main' ORDER BY 1"
+        )
+        if tables is not None:
             st.dataframe(tables, width="stretch")
-        except Exception:
-            pass

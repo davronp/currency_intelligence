@@ -81,13 +81,13 @@ def fetch_exchange_rates(
                 base_currency,
                 result["date"],
             )
-            return result
-
         except (requests.RequestException, ValueError) as exc:
             last_exc = exc
             logger.warning("Attempt %d failed for %s: %s", attempt, run_date, exc)
             if attempt < retry_attempts:
                 time.sleep(retry_backoff)
+        else:
+            return result
 
     msg = f"All {retry_attempts} fetch attempts failed for {base_currency} on {run_date}"
     raise RuntimeError(msg) from last_exc
@@ -96,6 +96,7 @@ def fetch_exchange_rates(
 def save_raw_rates(
     payload: dict[str, Any],
     raw_dir: Path,
+    *,
     force: bool = False,
 ) -> Path:
     """Upsert one date record into ``data/raw/rates_<BASE>.jsonl``.
@@ -109,8 +110,8 @@ def save_raw_rates(
     existing: dict[str, dict] = {}
     if out_file.exists():
         with open(out_file, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
+            for raw_line in fh:
+                line = raw_line.strip()
                 if line:
                     try:
                         rec = json.loads(line)
@@ -140,6 +141,7 @@ def run_ingestion(
     timeout: int = 30,
     retry_attempts: int = 3,
     retry_backoff: int = 5,
+    *,
     force: bool = False,
 ) -> Path:
     """Orchestrate fetch + persist for a single date."""

@@ -177,6 +177,6 @@ class TestTransformToGold:
         assert pairs == {"USD_EUR", "USD_SEK", "USD_GBP"}
 
     def test_gold_row_count_three_pairs(self, spark):
-        """60 days × 3 pairs = 180 rows."""
+        """60 days x 3 pairs = 180 rows."""
         df = _three_pairs_df(spark, n_days=60)
         assert transform_to_gold(df).count() == 180

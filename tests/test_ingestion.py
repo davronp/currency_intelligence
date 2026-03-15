@@ -150,16 +150,19 @@ class TestFetchExchangeRates:
         assert call_count == 2
 
     def test_exhausted_retries_raise_runtime_error(self):
-        with patch("requests.get", side_effect=requests.ConnectionError("down")), patch("time.sleep"):
-            with pytest.raises(RuntimeError, match="All 2 fetch attempts"):
-                fetch_exchange_rates(
-                    base_currency="USD",
-                    target_currencies=["EUR"],
-                    base_url="https://api.frankfurter.app",
-                    run_date=date(2024, 1, 15),
-                    retry_attempts=2,
-                    retry_backoff=0,
-                )
+        with (
+            patch("requests.get", side_effect=requests.ConnectionError("down")),
+            patch("time.sleep"),
+            pytest.raises(RuntimeError, match="All 2 fetch attempts"),
+        ):
+            fetch_exchange_rates(
+                base_currency="USD",
+                target_currencies=["EUR"],
+                base_url="https://api.frankfurter.app",
+                run_date=date(2024, 1, 15),
+                retry_attempts=2,
+                retry_backoff=0,
+            )
 
     def test_http_error_triggers_retry(self):
         call_count = 0
@@ -209,7 +212,7 @@ class TestSaveRawRates:
         save_raw_rates(_make_payload(date(2024, 1, 13)), tmp_path)
         save_raw_rates(_make_payload(date(2024, 1, 14)), tmp_path)
         lines = (tmp_path / "rates_USD.jsonl").read_text().strip().splitlines()
-        dates = [json.loads(l)["date"] for l in lines]
+        dates = [json.loads(line)["date"] for line in lines]
         assert dates == sorted(dates)
 
     def test_idempotent_same_date_no_duplicate(self, tmp_path):

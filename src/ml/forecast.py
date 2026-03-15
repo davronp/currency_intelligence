@@ -28,7 +28,7 @@ logger = get_logger(__name__)
 # Prophet import is deferred so the rest of the codebase can be
 # imported without Prophet installed (e.g. in CI without ML deps).
 try:
-    from prophet import Prophet  # type: ignore
+    from prophet import Prophet  # type: ignore[import-untyped]
 
     PROPHET_AVAILABLE = True
 except ImportError:
@@ -63,6 +63,7 @@ def _prepare_prophet_df(df_pair: pd.DataFrame) -> pd.DataFrame:
 
 def train_prophet(
     df_prophet: pd.DataFrame,
+    *,
     yearly_seasonality: bool = True,
     weekly_seasonality: bool = True,
     daily_seasonality: bool = False,
@@ -97,7 +98,6 @@ def train_prophet(
 def generate_forecast(
     model: Prophet,
     horizon_days: int = 30,
-    interval_width: float = 0.95,
 ) -> pd.DataFrame:
     """Generate *horizon_days* future predictions.
 
@@ -107,8 +107,6 @@ def generate_forecast(
         Fitted Prophet model.
     horizon_days:
         Number of calendar days to forecast.
-    interval_width:
-        Probability mass of the uncertainty interval.
 
     Returns
     -------
@@ -126,7 +124,7 @@ def forecast_pair(
     horizon_days: int = 30,
     min_training_rows: int = 30,
     prophet_kwargs: dict | None = None,
-    interval_width: float = 0.95,
+    _interval_width: float = 0.95,
 ) -> pd.DataFrame | None:
     """Train Prophet and produce forecasts for a single currency pair.
 
@@ -168,9 +166,9 @@ def forecast_pair(
 
     try:
         model = train_prophet(df_prophet, **prophet_kwargs)
-        forecast = generate_forecast(model, horizon_days, interval_width)
-    except Exception as exc:
-        logger.exception("Forecast failed for %s: %s", currency_pair, exc)
+        forecast = generate_forecast(model, horizon_days)
+    except Exception:
+        logger.exception("Forecast failed for %s", currency_pair)
         return None
 
     trained_at = datetime.now(UTC)
@@ -241,7 +239,7 @@ def run_forecasting(
             horizon_days=horizon_days,
             min_training_rows=min_training_rows,
             prophet_kwargs=prophet_kwargs,
-            interval_width=interval_width,
+            _interval_width=interval_width,
         )
         if forecast_df is not None:
             all_forecasts.append(forecast_df)

@@ -49,7 +49,7 @@ from src.utils.logger import get_logger, setup_logging
 logger = get_logger(__name__)
 
 
-def stage_ingestion(cfg, run_date: date, force: bool = False) -> None:
+def stage_ingestion(cfg, run_date: date, *, force: bool = False) -> None:
     from src.ingestion.fetch_rates import run_ingestion
 
     run_ingestion(
@@ -65,14 +65,13 @@ def stage_ingestion(cfg, run_date: date, force: bool = False) -> None:
     )
 
 
-def stage_bronze(cfg, spark, run_date: date) -> None:
+def stage_bronze(cfg, spark) -> None:
     from src.bronze.raw_to_bronze import run_bronze
 
     run_bronze(
         spark=spark,
         raw_dir=cfg.paths.raw,
         bronze_dir=cfg.paths.bronze,
-        run_date=run_date,
     )
 
 
@@ -252,6 +251,10 @@ def main() -> int:
     dates = resolve_dates(args)
     n = len(dates)
 
+    if not dates:
+        logger.warning("No weekday dates to process (all requested dates are weekends). Exiting.")
+        return 0
+
     logger.info("=" * 60)
     logger.info("Currency Intelligence Pipeline")
     logger.info("Dates    : %s → %s (%d day(s))", dates[0], dates[-1], n)
@@ -285,17 +288,11 @@ def main() -> int:
             logger.info("✓ Ingestion complete")
 
         if "bronze" in stages:
-            logger.info("── Stage: bronze (%d dates) ──", n)
-            for i, d in enumerate(dates, 1):
-                raw_dir = cfg.paths.raw / d.isoformat()
-                if not raw_dir.exists():
-                    logger.warning("  No raw data for %s, skipping bronze", d)
-                    continue
-                logger.info("  [%d/%d] bronze %s", i, n, d)
-                try:
-                    stage_bronze(cfg, spark, d)
-                except Exception as exc:
-                    logger.warning("  Bronze failed for %s: %s (skipping)", d, exc)
+            logger.info("── Stage: bronze ──")
+            if not any(cfg.paths.raw.glob("rates_*.jsonl")):
+                logger.warning("No raw JSONL files found in %s, skipping bronze", cfg.paths.raw)
+            else:
+                stage_bronze(cfg, spark)
             logger.info("✓ Bronze complete")
 
         if "silver" in stages:
@@ -321,11 +318,13 @@ def main() -> int:
         logger.info("=" * 60)
         logger.info("Pipeline completed successfully  ✓")
         logger.info("=" * 60)
-        return 0
 
-    except Exception as exc:
-        logger.exception("Pipeline failed: %s", exc)
+    except Exception:
+        logger.exception("Pipeline failed")
         return 1
+
+    else:
+        return 0
 
     finally:
         if spark is not None:

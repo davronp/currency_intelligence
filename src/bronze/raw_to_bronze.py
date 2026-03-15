@@ -38,8 +38,8 @@ def _parse_jsonl_file(jsonl_path: Path) -> list[dict]:
     """
     rows = []
     with open(jsonl_path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
+        for raw_line in fh:
+            line = raw_line.strip()
             if not line:
                 continue
             try:
@@ -140,7 +140,7 @@ def run_bronze(
     spark: SparkSession,
     raw_dir: Path,
     bronze_dir: Path,
-    run_date: date | None = None,  # kept for API compatibility, no longer used
+    _run_date: date | None = None,  # kept for API compatibility, no longer used
 ) -> DataFrame:
     """End-to-end bronze pipeline: load all JSONL -> transform -> write.
 

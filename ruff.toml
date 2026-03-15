@@ -41,15 +41,16 @@ target-version = "py314"
 select = ["ALL"]
 
 ignore = [
-    "D203", # incorrect-blank-line-before-class
-    "D213", # multi-line-summary-second-line
+    "D203",    # incorrect-blank-line-before-class
+    "D213",    # multi-line-summary-second-line
     "D100",    # undocumented-public-module
     "D102",    # undocumented-public-method
     "D101",    # undocumented-public-class
     "D205",    # missing-blank-line-after-summary
+    "D417",    # undocumented-param (extends D rule ignores)
     "INP001",  # implicit-namespace-package
-    "D103" ,   # undocumented-public-function
-    "S101" ,   # assert
+    "D103",    # undocumented-public-function
+    "S101",    # assert
     "D104",    # undocumented-public-package
     "T201",    # print
     "ANN",     # annotations
@@ -57,6 +58,15 @@ ignore = [
     "N803",    # invalid-argument-name
     "PTH123",  # builtin-open
     "N806",    # non-lowercase-variable-in-function
+    "N812",    # lowercase-imported-as-non-lowercase (PySpark `functions as F` convention)
+    "DTZ011",  # call-date-today (pipeline uses local dates by design)
+    "DTZ007",  # call-datetime-strptime-without-zone (date-only CLI arg parsing)
+    "PLR0913", # too-many-arguments (pipeline functions legitimately take many args)
+    "C901",    # complex-structure (pipeline orchestrator)
+    "PLR0912", # too-many-branches (pipeline orchestrator)
+    "PLR0915", # too-many-statements (pipeline orchestrator)
+    "PLW0603", # global-statement (intentional singleton pattern in logger.py)
+    "S608",    # hardcoded-sql-expression (internal SQL; table names come from config)
 ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
@@ -65,6 +75,11 @@ unfixable = []
 
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.per-file-ignores]
+"tests/**" = ["PLR2004", "PLC0415", "ARG001"]
+"run_pipeline.py" = ["PLC0415", "BLE001", "E402", "PLR2004"]
+"dashboard/app.py" = ["E402", "BLE001", "S110"]
 
 [format]
 # Like Black, use double quotes for strings.

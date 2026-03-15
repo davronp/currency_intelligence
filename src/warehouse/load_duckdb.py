@@ -10,6 +10,7 @@ backed by the Parquet lake files.
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from src.utils.logger import get_logger
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 try:
-    import duckdb  # type: ignore
+    import duckdb  # type: ignore[import-untyped]
 
     DUCKDB_AVAILABLE = True
 except ImportError:
@@ -34,13 +35,21 @@ def _assert_duckdb() -> None:
         raise ImportError(msg)
 
 
-def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
-    """Open (or create) a DuckDB database file.
+def get_connection(
+    db_path: Path,
+    retries: int = 5,
+    retry_delay: float = 2.0,
+) -> duckdb.DuckDBPyConnection:
+    """Open (or create) a DuckDB database file, retrying on lock contention.
 
     Parameters
     ----------
     db_path:
         File-system path to the ``.duckdb`` file.
+    retries:
+        Number of attempts before giving up.
+    retry_delay:
+        Seconds to wait between attempts.
 
     Returns
     -------
@@ -49,15 +58,36 @@ def get_connection(db_path: Path) -> duckdb.DuckDBPyConnection:
     """
     _assert_duckdb()
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = duckdb.connect(str(db_path))
-    logger.info("DuckDB connected: %s", db_path)
-    return conn
+    last_exc: Exception = RuntimeError("No attempts made")
+    for attempt in range(1, retries + 1):
+        try:
+            conn = duckdb.connect(str(db_path))
+            logger.info("DuckDB connected: %s", db_path)
+        except duckdb.IOException as exc:
+            last_exc = exc
+            logger.warning(
+                "DuckDB lock contention on %s (attempt %d/%d), retrying in %.0fs...",
+                db_path.name,
+                attempt,
+                retries,
+                retry_delay,
+            )
+            time.sleep(retry_delay)
+        else:
+            return conn
+
+    msg = (
+        f"Could not acquire DuckDB lock on {db_path} after {retries} attempts. "
+        "Another process may have it open. Close it and retry."
+    )
+    raise RuntimeError(msg) from last_exc
 
 
 def load_parquet_as_table(
     conn: duckdb.DuckDBPyConnection,
     table_name: str,
     parquet_path: Path,
+    *,
     hive_partitioned: bool = False,
 ) -> int:
     """(Re)create a DuckDB table backed by a Parquet dataset.
@@ -172,8 +202,8 @@ def run_warehouse(
     gold_dir: Path,
     forecasts_dir: Path,
     table_names: dict[str, str] | None = None,
-) -> duckdb.DuckDBPyConnection:
-    """Full warehouse pipeline: connect → load tables → create views.
+) -> None:
+    """Full warehouse pipeline: connect → load tables → create views → close.
 
     Parameters
     ----------
@@ -188,11 +218,6 @@ def run_warehouse(
         Defaults to ``{"exchange_rates": "gold_exchange_rates",
                        "forecasts": "ml_forecasts"}``.
 
-    Returns
-    -------
-    duckdb.DuckDBPyConnection
-        Open connection for further querying.
-
     """
     _assert_duckdb()
     logger.info("Starting warehouse load pipeline")
@@ -203,25 +228,27 @@ def run_warehouse(
     }
 
     conn = get_connection(db_path)
-
-    load_parquet_as_table(
-        conn,
-        table_names["exchange_rates"],
-        gold_dir,
-        hive_partitioned=False,  # Gold is a single coalesced file
-    )
-
-    forecast_file = forecasts_dir / "forecasts.parquet"
-    if forecast_file.exists():
+    try:
         load_parquet_as_table(
             conn,
-            table_names["forecasts"],
-            forecast_file,
-            hive_partitioned=False,
+            table_names["exchange_rates"],
+            gold_dir,
+            hive_partitioned=False,  # Gold is a single coalesced file
         )
-    else:
-        logger.warning("Forecasts file not found: %s", forecast_file)
 
-    create_analytical_views(conn)
-    logger.info("Warehouse pipeline complete")
-    return conn
+        forecast_file = forecasts_dir / "forecasts.parquet"
+        if forecast_file.exists():
+            load_parquet_as_table(
+                conn,
+                table_names["forecasts"],
+                forecast_file,
+                hive_partitioned=False,
+            )
+        else:
+            logger.warning("Forecasts file not found: %s", forecast_file)
+
+        create_analytical_views(conn)
+        logger.info("Warehouse pipeline complete")
+    finally:
+        conn.close()
+        logger.info("DuckDB connection closed")
