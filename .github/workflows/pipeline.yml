@@ -1,0 +1,68 @@
+name: CI Pipeline
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1-5" # weekdays at 06:00 UTC
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - run: ruff check .
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Install Stan (required by Prophet)
+        run: python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"
+      - name: Run tests
+        run: |
+          pytest tests/test_ingestion.py tests/test_bronze.py tests/test_silver.py tests/test_gold.py \
+            -v --cov=src --cov-report=term-missing
+  pipeline:
+    name: Daily pipeline
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Install Stan (required by Prophet)
+        run: python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"
+      - name: Run pipeline
+        run: python run_pipeline.py
+      - name: Upload pipeline artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-data-${{ github.run_id }}
+          path: |
+            data/gold/
+            data/forecasts/
+            data/warehouse/
+          retention-days: 60
