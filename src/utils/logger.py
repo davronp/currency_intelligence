@@ -7,6 +7,7 @@ configuring its own handler.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -46,6 +47,14 @@ def setup_logging(
         return
 
     numeric_level = getattr(logging, level.upper(), logging.INFO)
+
+    # Windows consoles default to a legacy code page (e.g. cp1252) and raise
+    # UnicodeEncodeError on non-ASCII log glyphs. Make stdout tolerant so a
+    # successful run is never derailed by a log line.
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        with contextlib.suppress(ValueError, OSError):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
 
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
 
