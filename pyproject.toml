@@ -1,0 +1,34 @@
+[project]
+name = "currency-intelligence"
+version = "0.1.0"
+description = "FX rate pipeline: Medallion architecture, Prophet forecasts, Streamlit dashboard"
+requires-python = ">=3.12,<3.14"
+# Base deps are the dashboard's runtime (what Streamlit Cloud installs by
+# default from uv.lock). The heavy pipeline-only stack lives in the
+# `pipeline` extra so it never lands in the dashboard deploy.
+dependencies = [
+    "pandas==2.2.3", # highest version compatible with Streamlit
+    "pyarrow==23.0.1",
+    "pyyaml==6.0.3",
+    "duckdb==1.4.4",
+    "streamlit==1.55.0",
+    "plotly==6.6.0",
+]
+
+[project.optional-dependencies]
+pipeline = [
+    "pyspark==4.1.1",
+    "requests==2.32.5",
+    "prophet==1.3.0",
+    "cmdstanpy==1.3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.2",
+    "pytest-cov==7.0.0",
+    "ruff==0.16.4", # keep in sync with .pre-commit-config.yaml
+]
+
+[tool.uv]
+package = false

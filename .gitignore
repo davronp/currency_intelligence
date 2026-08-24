@@ -71,7 +71,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-.python-version
 venv/
 .env/
 .venv/
