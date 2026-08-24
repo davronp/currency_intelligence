@@ -1,0 +1,6 @@
+* text=auto
+
+# Shell scripts must stay LF in the working tree, otherwise shellcheck
+# reports SC1017 (literal carriage return) on Windows checkouts.
+*.sh text eol=lf
+.bashrc text eol=lf
