@@ -16,6 +16,7 @@ A production-grade data engineering pipeline that ingests live FX rates, process
 | Forecasting | Facebook Prophet |
 | Dashboard | Streamlit, Plotly |
 | CI/CD | GitHub Actions |
+| Packaging | uv (pyproject + uv.lock) |
 | Code quality | Ruff, pytest, pytest-cov |
 
 ---
@@ -108,8 +109,7 @@ currency_intelligence/
 │   ├── ml/forecast.py             # Prophet training + prediction
 │   └── warehouse/load_duckdb.py   # Load Parquet into DuckDB, create views
 ├── dashboard/
-│   ├── app.py                     # Streamlit multi-tab dashboard
-│   └── requirements.txt           # Dashboard-only deps for Streamlit Cloud
+│   └── app.py                     # Streamlit multi-tab dashboard
 ├── tests/
 │   ├── conftest.py                # Shared SparkSession fixture (session-scoped)
 │   ├── test_ingestion.py
@@ -117,7 +117,8 @@ currency_intelligence/
 │   ├── test_silver.py
 │   └── test_gold.py
 ├── .github/workflows/pipeline.yml
-├── requirements.txt
+├── pyproject.toml                 # Dependencies and dev group (uv)
+├── uv.lock                        # Fully pinned, cross-platform lockfile
 └── run_pipeline.py                # Pipeline CLI orchestrator
 ```
 
@@ -125,44 +126,45 @@ currency_intelligence/
 
 ## Quickstart
 
-**Prerequisites:** Python 3.12+, Java 17+ (required by PySpark)
+**Prerequisites:** [uv](https://docs.astral.sh/uv/), Java 17+ (required by PySpark)
 
 ```bash
 git clone https://github.com/davronp/currency_intelligence.git
 cd currency_intelligence
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv sync --extra pipeline
 
 # Backfill 90 days of history (recommended for Prophet to have enough training data)
-python run_pipeline.py --backfill-days 90
+uv run python run_pipeline.py --backfill-days 90
 
 # Launch the dashboard
-streamlit run dashboard/app.py
+uv run streamlit run dashboard/app.py
 ```
+
+`uv sync` installs Python 3.12 (pinned in `.python-version`) and every dependency from `uv.lock`; no manual venv needed. The base install is the dashboard's runtime; the `pipeline` extra adds the heavy Spark/Prophet stack, so pass `--extra pipeline` to run the ingestion and forecasting pipeline locally.
 
 ### Pipeline CLI
 
 ```bash
 # Today only
-python run_pipeline.py
+uv run python run_pipeline.py
 
 # Explicit date range
-python run_pipeline.py --start-date 2025-01-01 --end-date 2025-03-01
+uv run python run_pipeline.py --start-date 2025-01-01 --end-date 2025-03-01
 
 # Re-fetch already-ingested dates (e.g. after adding a new currency)
-python run_pipeline.py --backfill-days 90 --force-ingest
+uv run python run_pipeline.py --backfill-days 90 --force-ingest
 
 # Skip ML forecasting
-python run_pipeline.py --skip-ml
+uv run python run_pipeline.py --skip-ml
 
 # Run only specific stages
-python run_pipeline.py --stages silver gold warehouse
+uv run python run_pipeline.py --stages silver gold warehouse
 ```
 
 ### Tests
 
 ```bash
-pytest tests/ -v --cov=src --cov-report=term-missing
+uv run pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
 ### Add a new currency
@@ -170,5 +172,5 @@ pytest tests/ -v --cov=src --cov-report=term-missing
 Edit `config/settings.yaml` -> `currencies.targets`, then backfill:
 
 ```bash
-python run_pipeline.py --backfill-days 90 --force-ingest
+uv run python run_pipeline.py --backfill-days 90 --force-ingest
 ```
