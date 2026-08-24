@@ -148,10 +148,12 @@ with tab1:
             x="date",
             y="rate",
             color="currency_pair",
-            labels={"rate": "Rate (USD base)", "date": "Date"},
+            labels={"rate": "Rate (USD base, log)", "date": "Date"},
             template="plotly_dark",
         )
         fig.update_layout(legend_title_text="Pair", height=450)
+        # Log scale so pairs at very different levels (EUR ~0.85 vs SEK ~9.5) stay readable.
+        fig.update_yaxes(type="log")
         st.plotly_chart(fig, width="stretch")
 
         col1, col2, col3 = st.columns(3)
