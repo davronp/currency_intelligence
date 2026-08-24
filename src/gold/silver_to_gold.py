@@ -30,6 +30,7 @@ from src.utils.spark_utils import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 logger = get_logger(__name__)
@@ -38,7 +39,7 @@ logger = get_logger(__name__)
 def add_moving_averages(
     df: DataFrame,
     windows: list[int],
-    partition_cols: list[str] = ("currency_pair",),
+    partition_cols: Sequence[str] = ("currency_pair",),
     order_col: str = "date",
     value_col: str = "rate",
 ) -> DataFrame:
@@ -77,7 +78,7 @@ def add_moving_averages(
 def add_volatility(
     df: DataFrame,
     window: int = 30,
-    partition_cols: list[str] = ("currency_pair",),
+    partition_cols: Sequence[str] = ("currency_pair",),
     order_col: str = "date",
     return_col: str = "daily_return",
 ) -> DataFrame:
@@ -108,7 +109,7 @@ def add_volatility(
 def add_rate_z_score(
     df: DataFrame,
     value_col: str = "rate",
-    partition_cols: list[str] = ("currency_pair",),
+    partition_cols: Sequence[str] = ("currency_pair",),
 ) -> DataFrame:
     """Append a lifetime z-score for the rate within each currency pair.
 
@@ -124,7 +125,7 @@ def add_created_timestamp(df: DataFrame) -> DataFrame:
 
 def transform_to_gold(
     df: DataFrame,
-    rolling_windows: list[int] = (7, 30, 90),
+    rolling_windows: Sequence[int] = (7, 30, 90),
     volatility_window: int = 30,
 ) -> DataFrame:
     """Full gold transformation pipeline.
@@ -177,7 +178,7 @@ def run_gold(
     spark: SparkSession,
     silver_dir: Path,
     gold_dir: Path,
-    rolling_windows: list[int] = (7, 30, 90),
+    rolling_windows: Sequence[int] = (7, 30, 90),
     volatility_window: int = 30,
 ) -> DataFrame:
     """End-to-end gold pipeline: read silver -> transform -> write.

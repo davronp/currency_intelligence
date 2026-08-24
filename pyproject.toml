@@ -28,6 +28,7 @@ dev = [
     "pytest==9.0.2",
     "pytest-cov==7.0.0",
     "ruff==0.16.4", # keep in sync with .pre-commit-config.yaml
+    "ty>=0.0.74",
 ]
 
 [tool.uv]

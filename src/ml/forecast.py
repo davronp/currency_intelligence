@@ -201,7 +201,7 @@ def _make_prophet_forecaster(
     kwargs = {**(prophet_kwargs or {}), "interval_width": interval_width}
 
     def _forecast(train_df: pd.DataFrame, holdout_ds: pd.Series) -> pd.DataFrame:
-        model = train_prophet(train_df, **kwargs)
+        model = train_prophet(train_df, **kwargs)  # ty: ignore[invalid-argument-type]
         future = pd.DataFrame({"ds": pd.to_datetime(list(holdout_ds))})
         predicted = model.predict(future)
         return predicted[["ds", "yhat", "yhat_lower", "yhat_upper"]]

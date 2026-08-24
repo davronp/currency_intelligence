@@ -90,3 +90,8 @@ Thumbs.db
 
 # Pre-commit
 .pre-commit-config.yaml.cache
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/

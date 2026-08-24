@@ -132,7 +132,8 @@ def load_parquet_as_table(
         SELECT * FROM read_parquet('{glob}', hive_partitioning={hive_flag});
     """
     conn.execute(sql)
-    row_count: int = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+    count_row = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    row_count: int = count_row[0] if count_row else 0
     logger.info("Loaded table '%s': %d rows", table_name, row_count)
     return row_count
 
@@ -143,7 +144,7 @@ def _table_exists(conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'main' AND table_name = ?",
         [table_name],
     ).fetchone()
-    return result[0] > 0
+    return result is not None and result[0] > 0
 
 
 def create_analytical_views(conn: duckdb.DuckDBPyConnection) -> None:

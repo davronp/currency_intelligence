@@ -26,3 +26,11 @@ repos:
     rev: v0.21.0 # Use the latest version
     hooks:
       - id: yamlfmt
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check)
+        entry: uv run --extra pipeline ty check
+        language: system
+        types: [python]
+        pass_filenames: false

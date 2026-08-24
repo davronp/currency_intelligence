@@ -8,12 +8,17 @@ to avoid the expensive per-test JVM startup overhead.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 from pyspark.sql import SparkSession
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
 
 @pytest.fixture(scope="session")
-def spark() -> SparkSession:
+def spark() -> Iterator[SparkSession]:
     """Provide a local SparkSession for the entire test session.
 
     Configuration is minimal to keep tests fast:
