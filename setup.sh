@@ -14,16 +14,17 @@ ask_permission() {
     return 0
 }
 
-if ask_permission "Update Ubuntu packages and install essentials (Python3, pip, venv, OpenJDK 17)"; then
+if ask_permission "Update Ubuntu packages and install Java 17 + build tools for the Spark/Prophet pipeline"; then
     sudo apt update
     sudo apt upgrade -y
-    sudo apt install -y python3 python3-pip python3-venv openjdk-17-jdk wget unzip build-essential
+    sudo apt install -y openjdk-17-jdk build-essential wget
 fi
 
-if ask_permission "Install Apache Spark 4.1.1 for WSL2"; then
+if ask_permission "Install standalone Apache Spark (matched to the pyspark pin) for WSL2"; then
     SPARK_DIR="/opt/spark"
-    SPARK_ARCHIVE="spark-4.1.1-bin-hadoop3.tgz"
-    SPARK_URL="https://dlcdn.apache.org/spark/spark-4.1.1/${SPARK_ARCHIVE}"
+    SPARK_VERSION="4.1.1"
+    SPARK_ARCHIVE="spark-${SPARK_VERSION}-bin-hadoop3.tgz"
+    SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_ARCHIVE}"
 
     echo "Preparing Spark installation directory..."
     sudo mkdir -p /opt
@@ -36,7 +37,7 @@ if ask_permission "Install Apache Spark 4.1.1 for WSL2"; then
         echo "Extracting Spark..."
         sudo tar -xzf "$SPARK_ARCHIVE"
 
-        sudo mv spark-4.1.1-bin-hadoop3 spark
+        sudo mv "spark-${SPARK_VERSION}-bin-hadoop3" spark
         sudo chown -R "$USER":"$USER" spark
 
         echo "Spark installed in $SPARK_DIR"
