@@ -4,6 +4,7 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 An end-to-end data engineering pipeline that ingests live FX rates, processes them through a **Medallion architecture** (Raw -> Bronze -> Silver -> Gold), trains **Prophet time-series forecasts** (with walk-forward backtesting), and serves results through an interactive **Streamlit dashboard** - updated daily via **GitHub Actions CI/CD**.
 
