@@ -1,5 +1,10 @@
 # Currency Intelligence Platform
 
+[![CI](https://github.com/davronp/currency_intelligence/actions/workflows/pipeline.yml/badge.svg)](https://github.com/davronp/currency_intelligence/actions/workflows/pipeline.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 An end-to-end data engineering pipeline that ingests live FX rates, processes them through a **Medallion architecture** (Raw -> Bronze -> Silver -> Gold), trains **Prophet time-series forecasts** (with walk-forward backtesting), and serves results through an interactive **Streamlit dashboard** - updated daily via **GitHub Actions CI/CD**.
 
 **Live demo:** [currency-intelligence.streamlit.app](https://currencyintelligence.streamlit.app/)
@@ -73,12 +78,32 @@ Frankfurter API
 A few choices are deliberate for a portfolio project and would differ in a high-scale production system:
 
 - **Spark demonstrates the API, not a data-size need.** The dataset is a few currency pairs at daily granularity (well under 50 MB), which DuckDB or pandas would handle comfortably. The transforms are written as reusable, tested window functions so the logic would scale out, but at this volume Spark is the heavier option by choice. DuckDB already serves the same data on the read side.
-- **Forecasts are backtested, not trusted blindly.** FX rates are close to a random walk, so the ML stage reports walk-forward MAPE and 95% interval coverage per pair (surfaced in the Forecasts tab) rather than presenting predictions as fact. In practice the backtest shows the 95% intervals under-cover badly at a 30-day horizon (coverage well below 95%), so the point forecasts are indicative and the bands are optimistic.
+- **Forecasts are a backtested persistence baseline.** FX rates are close to a random walk, so the model uses flat Prophet growth (holding near the latest level instead of extrapolating a trend), and the ML stage reports walk-forward MAPE and 95% interval coverage per pair (surfaced in the Forecasts tab). Backtested MAPE is ~0.5-3% with ~80-100% interval coverage - reasonably calibrated, the honest result for FX at a 30-day horizon.
 - **The daily job commits data back to the repo.** This keeps the hosted Streamlit demo self-contained and free, at the cost of data churn in git history. A production deployment would publish to object storage or a warehouse instead.
 
 ---
 
 ## Dashboard
+
+**Historical rates** (log scale so all pairs are readable)
+
+![Historical rates](docs/screenshots/historical.png)
+
+**Daily returns**
+
+![Daily returns](docs/screenshots/daily-returns.png)
+
+**Analytics - rolling averages and volatility**
+
+![Analytics](docs/screenshots/analytics.png)
+
+**Forecasts - 30-day Prophet with backtest metrics**
+
+![Forecasts](docs/screenshots/forecasts.png)
+
+**DuckDB SQL explorer**
+
+![DuckDB explorer](docs/screenshots/duckdb-explorer.png)
 
 | Tab | Contents |
 |---|---|
