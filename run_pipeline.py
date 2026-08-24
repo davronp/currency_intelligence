@@ -103,6 +103,7 @@ def stage_ml(cfg) -> None:
     from src.ml.forecast import run_forecasting
 
     prophet_kwargs = {
+        "growth": cfg.ml.prophet.growth,
         "yearly_seasonality": cfg.ml.prophet.yearly_seasonality,
         "weekly_seasonality": cfg.ml.prophet.weekly_seasonality,
         "daily_seasonality": cfg.ml.prophet.daily_seasonality,

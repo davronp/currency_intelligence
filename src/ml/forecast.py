@@ -66,6 +66,7 @@ def _prepare_prophet_df(df_pair: pd.DataFrame) -> pd.DataFrame:
 def train_prophet(
     df_prophet: pd.DataFrame,
     *,
+    growth: str = "flat",
     yearly_seasonality: bool = True,
     weekly_seasonality: bool = True,
     daily_seasonality: bool = False,
@@ -88,6 +89,7 @@ def train_prophet(
     """
     _validate_prophet_available()
     model = Prophet(
+        growth=growth,
         yearly_seasonality=yearly_seasonality,
         weekly_seasonality=weekly_seasonality,
         daily_seasonality=daily_seasonality,

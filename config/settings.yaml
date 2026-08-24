@@ -48,10 +48,11 @@ ml:
   forecast_horizon_days: 30
   backtest_horizon_days: 30
   prophet:
-    yearly_seasonality: true
+    growth: flat
+    yearly_seasonality: false
     weekly_seasonality: true
     daily_seasonality: false
-    changepoint_prior_scale: 0.05
+    changepoint_prior_scale: 0.01
     seasonality_prior_scale: 10.0
     interval_width: 0.95
   min_training_rows: 30

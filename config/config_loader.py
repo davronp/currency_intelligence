@@ -79,6 +79,7 @@ class GoldConfig:
 
 @dataclass(frozen=True)
 class ProphetConfig:
+    growth: str
     yearly_seasonality: bool
     weekly_seasonality: bool
     daily_seasonality: bool
@@ -159,6 +160,7 @@ def load_config(config_path: Path | None = None) -> AppConfig:
 
     prophet_raw = raw["ml"]["prophet"]
     prophet = ProphetConfig(
+        growth=prophet_raw["growth"],
         yearly_seasonality=prophet_raw["yearly_seasonality"],
         weekly_seasonality=prophet_raw["weekly_seasonality"],
         daily_seasonality=prophet_raw["daily_seasonality"],
