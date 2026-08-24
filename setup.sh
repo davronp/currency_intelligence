@@ -60,24 +60,22 @@ fi
 
 cd "$PROJECT_ROOT" || exit 1
 
-if ask_permission "Create Python virtual environment"; then
-    sudo apt install -y python3 python3-venv python3-pip
-    python3 -m venv venv
+if ask_permission "Create Python environment with uv"; then
+    if ! command -v uv &> /dev/null; then
+        echo "uv not found, installing..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
 
-    source venv/bin/activate
+    uv sync --extra pipeline
 
-    PYSPARK_PYTHON="$(realpath venv/bin/python)"
+    PYSPARK_PYTHON="$(realpath .venv/bin/python)"
     export PYSPARK_PYTHON
 
     PYSPARK_DRIVER_PYTHON="$PYSPARK_PYTHON"
     export PYSPARK_DRIVER_PYTHON
 
-    echo "Using venv Python for PySpark: $PYSPARK_PYTHON"
-
-    if [ -f "requirements.txt" ]; then
-        echo "Installing dependencies..."
-        pip install -r requirements.txt
-    fi
+    echo "Using uv venv Python for PySpark: $PYSPARK_PYTHON"
 fi
 
 if ask_permission "Add dev_utils to your ~/.bashrc using the current path"; then
@@ -98,7 +96,7 @@ if ask_permission "Check and setup pre-commit"; then
     if ! command -v pre-commit &> /dev/null; then
         echo "pre-commit not found."
         if ask_permission "Install pre-commit now"; then
-            python3 -m pip install -U pre-commit
+            uv tool install pre-commit
         fi
     else
         echo "pre-commit already installed ($(pre-commit --version))"
@@ -114,9 +112,7 @@ if ask_permission "Check and setup pre-commit"; then
 fi
 
 if ask_permission "Run minimal PySpark test"; then
-    source venv/bin/activate
-
-    python3 <<EOF
+    uv run python <<EOF
 from pyspark.sql import SparkSession
 import os, sys
 
