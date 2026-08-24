@@ -1,6 +1,6 @@
 # Currency Intelligence Platform
 
-A production-grade data engineering pipeline that ingests live FX rates, processes them through a **Medallion architecture** (Raw -> Bronze -> Silver -> Gold), trains **Prophet time-series forecasts**, and serves results through an interactive **Streamlit dashboard** - updated daily via **GitHub Actions CI/CD**.
+An end-to-end data engineering pipeline that ingests live FX rates, processes them through a **Medallion architecture** (Raw -> Bronze -> Silver -> Gold), trains **Prophet time-series forecasts** (with walk-forward backtesting), and serves results through an interactive **Streamlit dashboard** - updated daily via **GitHub Actions CI/CD**.
 
 **Live demo:** [currency-intelligence.streamlit.app](https://currencyintelligence.streamlit.app/)
 
@@ -67,6 +67,14 @@ Frankfurter API
 - **DuckDB as the serving layer** - reads Parquet natively without copying data; opened and closed per query so the pipeline can always acquire the write lock
 - **Config-driven** - currencies, windows, thresholds, and paths all live in `config/settings.yaml`; no magic values in source code
 - **Pure transformation functions** - each transform (e.g. `add_moving_averages`, `compute_daily_returns`) is a standalone function that takes and returns a DataFrame, making unit testing straightforward
+
+### Scope and tradeoffs
+
+A few choices are deliberate for a portfolio project and would differ in a high-scale production system:
+
+- **Spark demonstrates the API, not a data-size need.** The dataset is a few currency pairs at daily granularity (well under 50 MB), which DuckDB or pandas would handle comfortably. The transforms are written as reusable, tested window functions so the logic would scale out, but at this volume Spark is the heavier option by choice. DuckDB already serves the same data on the read side.
+- **Forecasts are backtested, not trusted blindly.** FX rates are close to a random walk, so the ML stage reports walk-forward MAPE and 95% interval coverage per pair (surfaced in the Forecasts tab) rather than presenting predictions as fact.
+- **The daily job commits data back to the repo.** This keeps the hosted Streamlit demo self-contained and free, at the cost of data churn in git history. A production deployment would publish to object storage or a warehouse instead.
 
 ---
 

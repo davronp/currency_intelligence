@@ -33,8 +33,23 @@ jobs:
         run: uv sync --locked --extra pipeline
       - name: Run tests
         run: |
-          uv run pytest tests/test_ingestion.py tests/test_bronze.py tests/test_silver.py tests/test_gold.py \
+          uv run pytest tests/test_ingestion.py tests/test_bronze.py tests/test_silver.py tests/test_gold.py tests/test_forecast.py \
             -v --cov=src --cov-report=term-missing
+  docker:
+    name: Build image
+    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build pipeline image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: currency-intelligence:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
   pipeline:
     name: Daily pipeline
     runs-on: ubuntu-latest
