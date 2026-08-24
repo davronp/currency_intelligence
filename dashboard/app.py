@@ -87,6 +87,18 @@ def load_forecasts() -> pd.DataFrame | None:
         return df
 
 
+@st.cache_data(ttl=300)
+def load_metrics() -> pd.DataFrame | None:
+    m_path = cfg.paths.forecasts / "forecast_metrics.parquet"
+    if not m_path.exists():
+        return None
+    try:
+        return pd.read_parquet(m_path)
+    except Exception as e:
+        st.error(f"Could not load forecast metrics: {e}")
+        return None
+
+
 def _query_duckdb(sql: str) -> pd.DataFrame | None:
     """Open a read-only DuckDB connection, run *sql*, close it, return result."""
     db_path = cfg.warehouse.db_file
@@ -108,6 +120,7 @@ st.title("💱 Currency Intelligence Platform")
 
 df_gold = load_gold()
 df_fc = load_forecasts()
+df_metrics = load_metrics()
 
 if df_gold is None:
     st.warning("⚠️  No gold data found.  Run the full pipeline first:\n\n```bash\npython run_pipeline.py\n```")
@@ -250,6 +263,31 @@ with tab4:
     else:
         import plotly.graph_objects as go
 
+        if df_metrics is not None and not df_metrics.empty:
+            st.markdown("**Backtest accuracy** (walk-forward on a held-out tail)")
+            st.caption(
+                "FX rates are close to a random walk, so treat these forecasts as "
+                "indicative. The table reports measured holdout accuracy: MAPE is "
+                "mean absolute % error (lower is better); coverage is the % of actuals "
+                "that fell inside the 95% band (well-calibrated is near 95%)."
+            )
+            summary = (
+                df_metrics[["currency_pair", "mape", "coverage", "mae", "holdout_start", "holdout_end"]]
+                .rename(
+                    columns={
+                        "currency_pair": "Pair",
+                        "mape": "MAPE %",
+                        "coverage": "Coverage %",
+                        "mae": "MAE",
+                        "holdout_start": "Holdout start",
+                        "holdout_end": "Holdout end",
+                    }
+                )
+                .set_index("Pair")
+                .round(3)
+            )
+            st.dataframe(summary, width="stretch")
+
         fc_pairs = [p for p in selected_pairs if p in df_fc["currency_pair"].unique()]
         if not fc_pairs:
             st.info("No forecast data for the selected pairs.")
@@ -257,6 +295,15 @@ with tab4:
         for pair in fc_pairs:
             fc_pair = df_fc[df_fc["currency_pair"] == pair].sort_values("forecast_date")
             hist_pair = df_view[df_view["currency_pair"] == pair].tail(90)
+
+            if df_metrics is not None:
+                mrow = df_metrics[df_metrics["currency_pair"] == pair]
+                if not mrow.empty:
+                    m = mrow.iloc[0]
+                    st.caption(
+                        f"Backtest {pair}: MAPE {m['mape']:.2f}%, "
+                        f"95% coverage {m['coverage']:.0f}%, MAE {m['mae']:.4f}"
+                    )
 
             fig = go.Figure()
 

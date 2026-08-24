@@ -114,6 +114,7 @@ def stage_ml(cfg) -> None:
         gold_dir=cfg.paths.gold,
         forecasts_dir=cfg.paths.forecasts,
         horizon_days=cfg.ml.forecast_horizon_days,
+        backtest_horizon_days=cfg.ml.backtest_horizon_days,
         min_training_rows=cfg.ml.min_training_rows,
         prophet_kwargs=prophet_kwargs,
         interval_width=cfg.ml.prophet.interval_width,

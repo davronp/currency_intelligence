@@ -46,6 +46,7 @@ gold:
   volatility_window: 30
 ml:
   forecast_horizon_days: 30
+  backtest_horizon_days: 30
   prophet:
     yearly_seasonality: true
     weekly_seasonality: true

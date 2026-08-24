@@ -90,6 +90,7 @@ class ProphetConfig:
 @dataclass(frozen=True)
 class MlConfig:
     forecast_horizon_days: int
+    backtest_horizon_days: int
     prophet: ProphetConfig
     min_training_rows: int
 
@@ -182,6 +183,7 @@ def load_config(config_path: Path | None = None) -> AppConfig:
         gold=GoldConfig(**raw["gold"]),
         ml=MlConfig(
             forecast_horizon_days=raw["ml"]["forecast_horizon_days"],
+            backtest_horizon_days=raw["ml"]["backtest_horizon_days"],
             prophet=prophet,
             min_training_rows=raw["ml"]["min_training_rows"],
         ),

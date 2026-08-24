@@ -18,9 +18,11 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from src.ml.metrics import coverage, mae, mape
 from src.utils.logger import get_logger
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 logger = get_logger(__name__)
@@ -185,15 +187,110 @@ def forecast_pair(
     return forecast
 
 
+def _make_prophet_forecaster(
+    prophet_kwargs: dict | None,
+    interval_width: float,
+) -> Callable[[pd.DataFrame, pd.Series], pd.DataFrame]:
+    """Build a forecaster that fits Prophet on train data and predicts given dates.
+
+    The returned callable maps ``(train_df[ds, y], holdout_ds)`` to a
+    DataFrame with ``ds, yhat, yhat_lower, yhat_upper``. Keeping this
+    separate lets :func:`backtest_pair` be unit-tested with a stub
+    forecaster that never touches Prophet.
+    """
+    kwargs = {**(prophet_kwargs or {}), "interval_width": interval_width}
+
+    def _forecast(train_df: pd.DataFrame, holdout_ds: pd.Series) -> pd.DataFrame:
+        model = train_prophet(train_df, **kwargs)
+        future = pd.DataFrame({"ds": pd.to_datetime(list(holdout_ds))})
+        predicted = model.predict(future)
+        return predicted[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+
+    return _forecast
+
+
+def backtest_pair(
+    pair_df: pd.DataFrame,
+    currency_pair: str,
+    forecaster: Callable[[pd.DataFrame, pd.Series], pd.DataFrame],
+    backtest_horizon: int = 30,
+    min_training_rows: int = 30,
+) -> dict | None:
+    """Score forecast accuracy on a held-out tail of a pair's history.
+
+    Trains (via *forecaster*) on all but the last *backtest_horizon*
+    observations, predicts those dates, and scores MAE, MAPE and interval
+    coverage against the actuals. Returns ``None`` when there is not enough
+    history to both train and hold out.
+
+    Parameters
+    ----------
+    pair_df:
+        Gold-layer Pandas DataFrame for one ``currency_pair``.
+    currency_pair:
+        Label for logging and output.
+    forecaster:
+        Callable mapping ``(train_df, holdout_ds)`` to a prediction frame.
+    backtest_horizon:
+        Number of trailing observations to hold out for evaluation.
+    min_training_rows:
+        Minimum rows required in the training split.
+
+    Returns
+    -------
+    dict or None
+        One row of backtest metrics, or ``None`` if skipped.
+
+    """
+    df_prophet = _prepare_prophet_df(pair_df)
+    n = len(df_prophet)
+
+    if n < min_training_rows + backtest_horizon:
+        logger.warning(
+            "Skipping backtest for %s - %d rows (need >= %d)",
+            currency_pair,
+            n,
+            min_training_rows + backtest_horizon,
+        )
+        return None
+
+    train = df_prophet.iloc[:-backtest_horizon]
+    holdout = df_prophet.iloc[-backtest_horizon:]
+
+    predicted = forecaster(train, holdout["ds"])
+    merged = holdout.merge(predicted, on="ds", how="inner")
+    if merged.empty:
+        logger.warning("Backtest for %s produced no aligned predictions", currency_pair)
+        return None
+
+    return {
+        "currency_pair": currency_pair,
+        "backtest_horizon": backtest_horizon,
+        "n_train": len(train),
+        "n_eval": len(merged),
+        "mae": mae(merged["y"], merged["yhat"]),
+        "mape": mape(merged["y"], merged["yhat"]),
+        "coverage": coverage(merged["y"], merged["yhat_lower"], merged["yhat_upper"]),
+        "holdout_start": holdout["ds"].min().date(),
+        "holdout_end": holdout["ds"].max().date(),
+        "evaluated_at": datetime.now(UTC),
+    }
+
+
 def run_forecasting(
     gold_dir: Path,
     forecasts_dir: Path,
     horizon_days: int = 30,
+    backtest_horizon_days: int = 30,
     min_training_rows: int = 30,
     prophet_kwargs: dict | None = None,
     interval_width: float = 0.95,
 ) -> pd.DataFrame:
     """Full ML pipeline: read gold Parquet -> train per pair -> save forecasts.
+
+    Also runs a walk-forward backtest per pair (train on all but the last
+    ``backtest_horizon_days`` observations, score MAE/MAPE/coverage on that
+    holdout) and writes the results to ``forecast_metrics.parquet``.
 
     Uses Pandas directly (no Spark) because Prophet is a single-machine
     library and the gold dataset fits comfortably in memory.
@@ -206,6 +303,8 @@ def run_forecasting(
         Output directory for forecast Parquet files.
     horizon_days:
         Forecast horizon in calendar days.
+    backtest_horizon_days:
+        Trailing observations held out for backtest scoring.
     min_training_rows:
         Skip training if fewer rows exist.
     prophet_kwargs:
@@ -231,7 +330,9 @@ def run_forecasting(
     pairs = df_gold["currency_pair"].unique()
     logger.info("Currency pairs found: %s", list(pairs))
 
+    forecaster = _make_prophet_forecaster(prophet_kwargs, interval_width)
     all_forecasts: list[pd.DataFrame] = []
+    metrics_rows: list[dict] = []
 
     for pair in pairs:
         pair_df = df_gold[df_gold["currency_pair"] == pair].copy()
@@ -246,13 +347,40 @@ def run_forecasting(
         if forecast_df is not None:
             all_forecasts.append(forecast_df)
 
+        try:
+            metrics = backtest_pair(
+                pair_df,
+                currency_pair=pair,
+                forecaster=forecaster,
+                backtest_horizon=backtest_horizon_days,
+                min_training_rows=min_training_rows,
+            )
+        except Exception:
+            logger.exception("Backtest failed for %s", pair)
+            metrics = None
+
+        if metrics is not None:
+            metrics_rows.append(metrics)
+            logger.info(
+                "Backtest %s: MAPE=%.3f%% coverage=%.1f%% (n_eval=%d)",
+                pair,
+                metrics["mape"],
+                metrics["coverage"],
+                metrics["n_eval"],
+            )
+
+    forecasts_dir.mkdir(parents=True, exist_ok=True)
+
+    if metrics_rows:
+        metrics_df = pd.DataFrame(metrics_rows)
+        metrics_df.to_parquet(forecasts_dir / "forecast_metrics.parquet", index=False)
+        logger.info("Backtest metrics saved (%d pairs)", len(metrics_df))
+
     if not all_forecasts:
         logger.warning("No forecasts were produced")
         return pd.DataFrame()
 
     combined = pd.concat(all_forecasts, ignore_index=True)
-
-    forecasts_dir.mkdir(parents=True, exist_ok=True)
     out_path = forecasts_dir / "forecasts.parquet"
     combined.to_parquet(out_path, index=False)
     logger.info("Forecasts saved -> %s (%d rows)", out_path, len(combined))
