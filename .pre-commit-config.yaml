@@ -10,19 +10,19 @@ repos:
       - id: check-json
       - id: check-xml
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.13
+    rev: v0.16.4
     hooks:
       # Run the linter.
       - id: ruff-check
         args: [--fix, --unsafe-fixes]
-      # Run the formatter.
       - id: ruff-format
+        # Run the formatter.
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+    rev: v0.11.0.1-1
     hooks:
       - id: shellcheck
         args: ["-x", -e, SC1091]
   - repo: https://github.com/google/yamlfmt
-    rev: v0.16.0 # Use the latest version
+    rev: v0.21.0 # Use the latest version
     hooks:
       - id: yamlfmt

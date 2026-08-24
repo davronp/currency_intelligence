@@ -62,6 +62,8 @@ ignore = [
     "DTZ011",  # call-date-today (pipeline uses local dates by design)
     "DTZ007",  # call-datetime-strptime-without-zone (date-only CLI arg parsing)
     "PLR0913", # too-many-arguments (pipeline functions legitimately take many args)
+    "PLR0917", # too-many-positional-arguments (same rationale as PLR0913)
+    "CPY001",  # missing-copyright-notice
     "C901",    # complex-structure (pipeline orchestrator)
     "PLR0912", # too-many-branches (pipeline orchestrator)
     "PLR0915", # too-many-statements (pipeline orchestrator)
