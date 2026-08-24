@@ -269,7 +269,9 @@ with tab4:
                 "FX rates are close to a random walk, so treat these forecasts as "
                 "indicative. The table reports measured holdout accuracy: MAPE is "
                 "mean absolute % error (lower is better); coverage is the % of actuals "
-                "that fell inside the 95% band (well-calibrated is near 95%)."
+                "that fell inside the 95% band (well-calibrated is near 95%). In practice "
+                "coverage runs well below 95% at a 30-day horizon: the point forecasts are "
+                "usable but the intervals are optimistic and under-cover."
             )
             summary = (
                 df_metrics[["currency_pair", "mape", "coverage", "mae", "holdout_start", "holdout_end"]]

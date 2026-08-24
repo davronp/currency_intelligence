@@ -73,7 +73,7 @@ Frankfurter API
 A few choices are deliberate for a portfolio project and would differ in a high-scale production system:
 
 - **Spark demonstrates the API, not a data-size need.** The dataset is a few currency pairs at daily granularity (well under 50 MB), which DuckDB or pandas would handle comfortably. The transforms are written as reusable, tested window functions so the logic would scale out, but at this volume Spark is the heavier option by choice. DuckDB already serves the same data on the read side.
-- **Forecasts are backtested, not trusted blindly.** FX rates are close to a random walk, so the ML stage reports walk-forward MAPE and 95% interval coverage per pair (surfaced in the Forecasts tab) rather than presenting predictions as fact.
+- **Forecasts are backtested, not trusted blindly.** FX rates are close to a random walk, so the ML stage reports walk-forward MAPE and 95% interval coverage per pair (surfaced in the Forecasts tab) rather than presenting predictions as fact. In practice the backtest shows the 95% intervals under-cover badly at a 30-day horizon (coverage well below 95%), so the point forecasts are indicative and the bands are optimistic.
 - **The daily job commits data back to the repo.** This keeps the hosted Streamlit demo self-contained and free, at the cost of data churn in git history. A production deployment would publish to object storage or a warehouse instead.
 
 ---
