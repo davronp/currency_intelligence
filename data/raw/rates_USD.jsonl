@@ -187,3 +187,4 @@
 {"base": "USD", "date": "2026-09-10", "rates": {"EUR": 0.86088, "GBP": 0.73963, "NOK": 9.2661, "SEK": 9.6414}, "fetched_at": "2026-09-11T10:50:33.509114+00:00", "source": "https://api.frankfurter.app"}
 {"base": "USD", "date": "2026-09-11", "rates": {"EUR": 0.86266, "GBP": 0.7403, "NOK": 9.2999, "SEK": 9.694}, "fetched_at": "2026-09-14T12:08:36.636982+00:00", "source": "https://api.frankfurter.app"}
 {"base": "USD", "date": "2026-09-14", "rates": {"EUR": 0.86573, "GBP": 0.74104, "NOK": 9.3213, "SEK": 9.7663}, "fetched_at": "2026-09-15T11:21:39.881997+00:00", "source": "https://api.frankfurter.app"}
+{"base": "USD", "date": "2026-09-15", "rates": {"EUR": 0.86663, "GBP": 0.74166, "NOK": 9.3466, "SEK": 9.7703}, "fetched_at": "2026-09-16T11:04:08.196444+00:00", "source": "https://api.frankfurter.app"}
